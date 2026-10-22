@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { useT } from '@/lib/i18n'
+import { editorBridge } from '@/editor/bridge'
 import { TypographyPopover } from './TypographyPopover'
 import { MoreMenu } from './MoreMenu'
 
@@ -74,6 +75,7 @@ export function TopBar() {
 
   const commitRename = () => {
     setEditing(false)
+    editorBridge.focus()
     if (!activeDocument) return
     const name = ensureMarkdownExtension(sanitizeFileName(nameValue))
     if (!name || name === activeDocument.fileName) return
@@ -100,6 +102,7 @@ export function TopBar() {
               } else if (event.key === 'Escape') {
                 event.preventDefault()
                 setEditing(false)
+                editorBridge.focus()
               }
             }}
           />

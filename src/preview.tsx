@@ -251,6 +251,7 @@ async function renderShell(): Promise<void> {
       content: CONTENT,
       originalEncoding: 'utf-8',
       displayTitle: 'Hello World',
+      openSeq: 1,
     },
     saveState: 'idle',
     libraryPath: '/library',

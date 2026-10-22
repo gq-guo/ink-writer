@@ -65,6 +65,8 @@ interface DocumentState {
 
 /** 待写入磁盘的内容（null = 无待写内容） */
 let pendingText: string | null = null
+/** 文档打开序号：驱动编辑器重建的唯一信号（rename 只改元数据，不应重建） */
+let openSeqCounter = 0
 /** 最近一次成功写入的内容 */
 let lastWrittenText = ''
 /** 写入队列，保证同一时间只有一个写入任务 */
@@ -194,6 +196,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         content: result.content,
         originalEncoding: (result.encoding as Document['originalEncoding']) ?? 'unknown',
         displayTitle: extractDisplayTitle(result.content, fileName),
+        openSeq: ++openSeqCounter,
       }
       pendingText = null
       lastWrittenText = result.content

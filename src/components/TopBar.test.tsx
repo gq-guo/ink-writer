@@ -18,6 +18,7 @@ const DOC = {
   content: '',
   originalEncoding: 'utf-8' as const,
   displayTitle: 'Untitled',
+  openSeq: 1,
 }
 
 describe('TopBar 文件名内联重命名', () => {

@@ -27,6 +27,41 @@ const DOC = {
   displayTitle: 'Note',
 }
 
+describe('rename 的元数据隔离', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('rename 只改元数据：openSeq 与 content 不变（编辑器不重建、光标不丢）', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'hello', encoding: 'utf-8', mtime: 1000, size: 5, lineEnding: 'lf' }
+        case 'rename_document':
+          return '/library/New Name.md'
+        case 'list_documents':
+          return []
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Old.md')
+    const before = documentStore.getState().activeDocument!
+
+    await documentStore.getState().renameDocument('/library/Old.md', 'New Name.md')
+
+    const after = documentStore.getState().activeDocument!
+    expect(after.fileName).toBe('New Name.md')
+    expect(after.path).toBe('/library/New Name.md')
+    // 关键：openSeq 不变 → EditorHost 不会重建 EditorState → 光标与滚动位置保持
+    expect(after.openSeq).toBe(before.openSeq)
+    expect(after.content).toBe(before.content)
+  })
+})
+
 describe('documentStore 自动保存状态机（spec §12.1 / §19.2）', () => {
   beforeEach(() => {
     invokeMock.mockReset()

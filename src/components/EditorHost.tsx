@@ -35,7 +35,7 @@ export function EditorHost() {
   const contentRef = useRef('')
 
   const activeDocument = useDocumentStore((state) => state.activeDocument)
-  const activePath = activeDocument?.path
+  const openSeq = activeDocument?.openSeq
   const t = useT()
   const performanceMode = activeDocument ? isPerformanceMode(activeDocument.size) : false
   const performanceNotifiedRef = useRef(false)
@@ -194,7 +194,7 @@ export function EditorHost() {
         setTypewriterModeEffect.of(currentTypewriterMode()),
       ],
     })
-  }, [activePath, currentFocusMode, currentTypewriterMode, syncDarkFlag, t])
+  }, [openSeq, currentFocusMode, currentTypewriterMode, syncDarkFlag, t])
 
   // ── 大文件性能模式（spec §18.2）──
   useEffect(() => {
