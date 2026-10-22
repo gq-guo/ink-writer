@@ -137,7 +137,7 @@ export function TopBar() {
         ) : null}
       </div>
 
-      <div className="ink-topbar-right">
+      <div className="ink-topbar-right" ref={moreRef}>
         <button className="ink-icon-btn" title={t('topbar.search')} onClick={showQuickOpen}>
           <span className="ink-icon ink-icon-search" aria-hidden />
         </button>
@@ -158,7 +158,7 @@ export function TopBar() {
           ) : null}
         </div>
 
-        <div className="ink-popover-anchor" ref={moreRef}>
+        <div className="ink-popover-anchor">
           <button
             className="ink-icon-btn"
             title={t('topbar.more')}

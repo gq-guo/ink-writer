@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
@@ -68,6 +69,16 @@ describe('TopBar 文件名内联重命名', () => {
         resolve()
       }, 10),
     )
+  })
+
+  it('Aa 按钮第二次点击收起排版面板', async () => {
+    const user = userEvent.setup()
+    render(<TopBar />)
+    const aaButton = screen.getByTitle('排版')
+    await user.click(aaButton)
+    expect(screen.getByText('写作字体')).toBeInTheDocument()
+    await user.click(aaButton)
+    expect(screen.queryByText('写作字体')).not.toBeInTheDocument()
   })
 
   it('Enter 提交 + blur 不会触发两次 rename（防重入）', () => {
