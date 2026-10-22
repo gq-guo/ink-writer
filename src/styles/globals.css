@@ -985,8 +985,12 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   justify-content: space-between;
   gap: 12px;
   height: 40px;
-  /* 左侧留出红绿灯的位置 */
-  padding: 0 14px 0 88px;
+  padding: 0 14px 0 max(80px, calc((100% - var(--editor-max-width)) / 2 + 24px));
+}
+
+/* 侧栏展开时 <main> 右移、无红绿灯遮挡：文件名与正文栏左对齐 */
+.ink-shell main[data-sidebar='true'] .ink-topbar {
+  padding-left: calc((100% - var(--editor-max-width)) / 2 + 24px);
 }
 
 .ink-topbar-left {

@@ -324,7 +324,14 @@ pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandErr
         .parent()
         .ok_or_else(|| CommandError::Message("无效的文件路径".into()))?;
     let target = parent.join(new_name);
-    if target.exists() {
+    // 大小写变体（aa.md → AA.md）在同一文件上，macOS 大小写不敏感文件系统
+    // 下 target.exists() 为 true，需按 canonical 路径判断是否同一文件
+    let same_file = fs::canonicalize(&target)
+        .ok()
+        .zip(fs::canonicalize(path).ok())
+        .map(|(a, b)| a == b)
+        .unwrap_or(false);
+    if !same_file && target.exists() {
         return Err(CommandError::Message(format!("已存在同名文件：{}", new_name)));
     }
     fs::rename(path, &target).map_err(|e| io_message(path, &e))?;

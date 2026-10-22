@@ -8,7 +8,7 @@
  * 行内样式：同一插件对可见区间内的行内节点产出 Decoration.mark
  * 只计算可见区间 ±200 行，禁止全文档 decoration
  */
-import { syntaxTree } from '@codemirror/language'
+import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language'
 import type { EditorState, Range } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
@@ -249,6 +249,8 @@ export const inkStyledSourcePlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
     view: EditorView
+    private timer: ReturnType<typeof setTimeout> | null = null
+    private destroyed = false
 
     constructor(view: EditorView) {
       this.view = view
@@ -261,7 +263,32 @@ export const inkStyledSourcePlugin = ViewPlugin.fromClass(
         update.viewportChanged ||
         (update.selectionSet && selectionCrossedLine(update))
       ) {
-        this.decorations = buildDecorations(update.view.state, paddedVisibleRanges(update.view, PAD_LINES))
+        this.rebuild(update.view)
+      }
+    }
+
+    destroy() {
+      this.destroyed = true
+      if (this.timer) clearTimeout(this.timer)
+    }
+
+    private rebuild(view: EditorView) {
+      this.decorations = buildDecorations(view.state, paddedVisibleRanges(view, PAD_LINES))
+      /*
+       * 增量解析是异步的：刚按 Enter 时语法树还没更新，立即重建会让
+       * 新行短暂丢失「段落末行」等样式（段落间距不一致）。
+       * 解析未完成时延迟一拍再建一次。
+       */
+      if (!syntaxTreeAvailable(view.state)) {
+        if (this.timer) clearTimeout(this.timer)
+        this.timer = setTimeout(() => {
+          this.timer = null
+          if (this.destroyed) return
+          this.decorations = buildDecorations(
+            this.view.state,
+            paddedVisibleRanges(this.view, PAD_LINES),
+          )
+        }, 30)
       }
     }
   },

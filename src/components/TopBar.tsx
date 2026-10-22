@@ -51,9 +51,12 @@ export function TopBar() {
   const [editing, setEditing] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const nameInputRef = useRef<HTMLInputElement | null>(null)
+  /** 防重入：Enter 提交后 input 卸载会再触发一次 blur，导致 rename 跑两遍 */
+  const committingRef = useRef(false)
 
   const startEditing = () => {
     if (!activeDocument) return
+    committingRef.current = false
     setNameValue(activeDocument.fileName.replace(/\.(md|markdown|mdown|txt)$/i, ''))
     setEditing(true)
   }
@@ -74,6 +77,8 @@ export function TopBar() {
   }, [editing])
 
   const commitRename = () => {
+    if (committingRef.current) return
+    committingRef.current = true
     setEditing(false)
     editorBridge.focus()
     if (!activeDocument) return

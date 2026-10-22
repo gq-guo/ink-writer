@@ -7,7 +7,7 @@
  * 实现说明：spec §8.2 建议用 StateField，但可见区间（view.visibleRanges）只有 View 上才有，
  * 因此这里用 ViewPlugin 承载 DecorationSet —— 行为与 spec 一致，且保证只计算可见区间 ±200 行。
  */
-import { syntaxTree } from '@codemirror/language'
+import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Range } from '@codemirror/state'
 import type { SyntaxNode, Tree } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
@@ -160,6 +160,12 @@ export const inkFocusModePlugin = ViewPlugin.fromClass(
         view.state,
         paddedVisibleRanges(view, focusPadLines(view.state.doc.length)),
       )
+      if (!syntaxTreeAvailable(view.state)) {
+        this.timer = setTimeout(() => {
+          this.timer = null
+          this.recompute(this.view)
+        }, 30)
+      }
     }
 
     destroy() {

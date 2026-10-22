@@ -29,6 +29,7 @@ export default function App() {
   const hydrated = useSettingsStore((state) => state.hydrated)
   const libraryPath = useSettingsStore((state) => state.settings.libraryPath)
   const focusMode = useEditorStore((state) => state.focusMode)
+  const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   const quickOpenVisible = useUiStore((state) => state.quickOpenVisible)
   const paletteVisible = useUiStore((state) => state.paletteVisible)
   const bootstrappedRef = useRef(false)
@@ -132,7 +133,7 @@ export default function App() {
       {/* 窗口拖拽条：红绿灯内嵌时 webview 覆盖了原生标题栏 */}
       <WindowDragRegion className="ink-window-drag" />
       <Sidebar />
-      <main className="relative h-full flex-1 overflow-hidden">
+      <main className="relative h-full flex-1 overflow-hidden" data-sidebar={sidebarVisible}>
         <TopBar />
         <DocumentHeader />
         <EditorHost />

@@ -69,6 +69,19 @@ describe('TopBar 文件名内联重命名', () => {
     )
   })
 
+  it('Enter 提交 + blur 不会触发两次 rename（防重入）', () => {
+    const renameDocument = vi.fn()
+    useDocumentStore.setState({ renameDocument } as never)
+    render(<TopBar />)
+    fireEvent.click(screen.getByText('Untitled.md'))
+    const input = screen.getByDisplayValue('Untitled')
+    fireEvent.change(input, { target: { value: 'Once' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.blur(input)
+    expect(renameDocument).toHaveBeenCalledTimes(1)
+    expect(renameDocument).toHaveBeenCalledWith(DOC.path, 'Once.md')
+  })
+
   it('名称不变时不触发写入', () => {
     const renameDocument = vi.fn()
     useDocumentStore.setState({ renameDocument } as never)
