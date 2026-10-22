@@ -120,7 +120,12 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
           data-checked={locale === value ? 'true' : undefined}
           onClick={() => updateSettings({ locale: value })}
         >
-          <span className={`ink-icon ${locale === value ? 'ink-icon-check' : ''}`} aria-hidden />
+          <span
+            className={`ink-icon ${
+              locale === value ? 'ink-icon-check ink-lang-check' : 'ink-icon-circle'
+            }`}
+            aria-hidden
+          />
           {t(labelKey)}
         </button>
       ))}
