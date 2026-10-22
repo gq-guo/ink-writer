@@ -345,6 +345,49 @@ pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandErr
     Ok(target.to_string_lossy().to_string())
 }
 
+/** 复制整个文档库（更换保存位置用）：复制 .md 与 assets，重名跳过，不删除旧库 */
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyStats {
+    pub copied: u64,
+    pub skipped: u64,
+}
+
+pub fn copy_library(from: &Path, to: &Path) -> Result<CopyStats, CommandError> {
+    let mut stats = CopyStats { copied: 0, skipped: 0 };
+    copy_library_inner(from, to, &mut stats)?;
+    Ok(stats)
+}
+
+fn copy_library_inner(from: &Path, to: &Path, stats: &mut CopyStats) -> Result<(), CommandError> {
+    let entries = match fs::read_dir(from) {
+        Ok(e) => e,
+        Err(e) => return Err(io_message(from, &e)),
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let source = entry.path();
+        let target = to.join(&name);
+        let Ok(file_type) = entry.file_type() else { continue };
+        if file_type.is_dir() {
+            // 只复制文档内容（.md 与 assets 等媒体目录），其他目录也一并复制以保持相对结构
+            fs::create_dir_all(&target).map_err(|e| io_message(&target, &e))?;
+            copy_library_inner(&source, &target, stats)?;
+        } else if file_type.is_file() && is_markdown(&name) {
+            if target.exists() {
+                stats.skipped += 1;
+            } else {
+                fs::copy(&source, &target).map_err(|e| io_message(&source, &e))?;
+                stats.copied += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// 复制 assets 目录（导出 HTML 时使用）
 pub fn copy_assets(from_dir: &Path, to_dir: &Path) -> Result<(), CommandError> {
     let source = from_dir.join("assets");
@@ -508,6 +551,29 @@ mod tests {
         assert_eq!(first.file_name, "Untitled.md");
         let second = create_document(&dir, "Untitled").unwrap();
         assert_eq!(second.file_name, "Untitled 2.md");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_library_copies_markdown_and_skips_existing() {
+        let dir = temp_dir("copy-lib");
+        let from = dir.join("from");
+        let to = dir.join("to");
+        fs::create_dir_all(from.join("sub")).unwrap();
+        fs::create_dir_all(&to).unwrap();
+        fs::write(from.join("a.md"), "a").unwrap();
+        fs::write(from.join("sub/b.md"), "b").unwrap();
+        fs::write(from.join("notes.txt"), "t").unwrap();
+        // 目标已存在同名文件 → 跳过
+        fs::write(to.join("a.md"), "old").unwrap();
+
+        let stats = copy_library(&from, &to).unwrap();
+        assert_eq!(stats.copied, 1);
+        assert_eq!(stats.skipped, 1);
+        assert_eq!(fs::read_to_string(to.join("sub/b.md")).unwrap(), "b");
+        assert_eq!(fs::read_to_string(to.join("a.md")).unwrap(), "old");
+        // 旧库不受影响
+        assert!(from.join("a.md").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -94,6 +94,12 @@ fn copy_assets(from_dir: String, to_dir: String) -> Result<(), CommandError> {
     fs_ops::copy_assets(&to_path(&from_dir), &to_path(&to_dir))
 }
 
+/// 更换文档库：复制现有文档到目标目录（不删除旧库）
+#[tauri::command]
+fn copy_library(from_dir: String, to_dir: String) -> Result<fs_ops::CopyStats, CommandError> {
+    fs_ops::copy_library(&to_path(&from_dir), &to_path(&to_dir))
+}
+
 #[tauri::command]
 fn set_watch_path(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
     watcher::watch_library(&app, Path::new(&path))
@@ -267,6 +273,7 @@ pub fn run() {
             search_content,
             write_text_file,
             copy_assets,
+            copy_library,
             set_watch_path,
             path_exists,
             ensure_directory,

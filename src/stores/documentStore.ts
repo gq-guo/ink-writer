@@ -52,6 +52,8 @@ interface DocumentState {
   bootstrapped: boolean
 
   bootstrapLibrary: (libraryPath: string) => Promise<void>
+  /** 更换文档库位置：复制现有文档到新目录（不删旧库），再切换过去 */
+  changeLibrary: (newPath: string) => Promise<void>
   refreshDocuments: () => Promise<void>
   createDocument: () => Promise<void>
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
@@ -157,6 +159,44 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
     await get().refreshDocuments()
     set({ bootstrapped: true })
+  },
+
+  changeLibrary: async (newPath: string) => {
+    const oldPath = get().libraryPath
+    if (!newPath || newPath === oldPath) return
+    await get().flushSave()
+    try {
+      await invoke('ensure_directory', { path: newPath })
+      if (oldPath) {
+        const stats = await invoke<{ copied: number; skipped: number }>('copy_library', {
+          fromDir: oldPath,
+          toDir: newPath,
+        })
+        if (stats.copied > 0 || stats.skipped > 0) {
+          useUiStore
+            .getState()
+            .pushToast({ message: t('toast.libraryMoved', { count: stats.copied }), kind: 'info' })
+        }
+      }
+    } catch (error) {
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+      return
+    }
+
+    useSettingsStore.getState().update({ libraryPath: newPath })
+    set({ libraryPath: newPath })
+    try {
+      await invoke('set_watch_path', { path: newPath })
+    } catch {
+      /* watch 失败不阻断，乐观锁兜底 */
+    }
+    await get().refreshDocuments()
+    const state = get()
+    if (state.documents.length === 0) {
+      await state.createDocument()
+    } else {
+      await state.openDocument(state.documents[0]!.path)
+    }
   },
 
   refreshDocuments: async () => {
