@@ -280,6 +280,13 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
           },
         })
       }
+      // 收藏里存的是路径，rename 后同步，否则收藏会「丢失」
+      const settings = useSettingsStore.getState().settings
+      if (settings.favorites.includes(path)) {
+        useSettingsStore.getState().update({
+          favorites: settings.favorites.map((item) => (item === path ? newPath : item)),
+        })
+      }
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
     }
@@ -291,8 +298,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       await get().refreshDocuments()
       const active = get().activeDocument
       if (active && active.path === path) {
-        // 活动文档被删除：保留内存内容，下次 flush 时重建
-        set({ activeDocument: null })
+        // 活动文档被删除：保留内存内容与 activeDocument —— 有未保存修改时
+        // 下次 flush 会重建文件（Rust 侧对不存在的文件跳过 mtime 检查）。
+        // 注意：绝不能在这里清空 activeDocument，否则待写内容永远丢失。
         useUiStore.getState().pushToast({ message: t('toast.trashed'), kind: 'info' })
       }
     } catch (error) {
@@ -454,6 +462,9 @@ async function doWrite(): Promise<void> {
   if (pendingText === null) return
   if (pendingText === lastWrittenText) {
     pendingText = null
+    if (useDocumentStore.getState().saveState === 'dirty') {
+      useDocumentStore.setState({ saveState: 'idle' })
+    }
     return
   }
 

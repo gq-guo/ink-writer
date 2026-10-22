@@ -62,6 +62,47 @@ describe('rename 的元数据隔离', () => {
   })
 })
 
+describe('删除活动文档（spec §12.3：保留内存，flush 重建）', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('删除后不丢待写内容：activeDocument 保留，flush 重建文件', async () => {
+    const writes: string[] = []
+    invokeMock.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'original', encoding: 'utf-8', mtime: 1000, size: 8, lineEnding: 'lf' }
+        case 'write_document':
+          writes.push(String(args.content))
+          return { mtime: 1001 }
+        case 'delete_document':
+          return undefined
+        case 'list_documents':
+          return []
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
+
+    // 有未保存修改时删除（模拟废纸篓）
+    documentStore.getState().onEditorChange('modified content')
+    await documentStore.getState().deleteDocument('/library/Note.md')
+
+    // 关键：activeDocument 必须保留，待写内容不得丢失
+    expect(documentStore.getState().activeDocument).not.toBeNull()
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Note.md')
+
+    // 下次 flush 把内容写回（重建文件）
+    await documentStore.getState().flushSave()
+    expect(writes).toContain('modified content')
+  })
+})
+
 describe('documentStore 自动保存状态机（spec §12.1 / §19.2）', () => {
   beforeEach(() => {
     invokeMock.mockReset()
