@@ -32,7 +32,8 @@ export const inkThemeSpec = {
     lineHeight: 'var(--writing-line-height)',
     maxWidth: 'var(--editor-max-width)',
     margin: '0 auto',
-    padding: '16px 24px 40vh 24px',
+    // ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%）
+    padding: '16px 24px calc(50vh + 32px) 24px',
     caretColor: 'var(--accent)',
   },
   '.cm-scroller': {
