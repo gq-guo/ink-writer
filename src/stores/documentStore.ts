@@ -26,6 +26,7 @@ import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from './editorStore'
 import { useSettingsStore } from './settingsStore'
 import { useUiStore } from './uiStore'
+import { t } from '@/lib/i18n'
 
 /** 自动保存防抖（spec §12.1） */
 const AUTOSAVE_DEBOUNCE_MS = 500
@@ -128,7 +129,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     if (!exists) {
       useUiStore
         .getState()
-        .pushToast({ message: `找不到文档库：${libraryPath}`, kind: 'error' })
+        .pushToast({ message: `${t('toast.libraryMissing')}: ${libraryPath}`, kind: 'error' })
       useSettingsStore.getState().setLibraryPath('')
       return
     }
@@ -140,7 +141,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       // watch 失效时降级为「保存前 mtime 检查」（乐观锁兜底）
       useUiStore
         .getState()
-        .pushToast({ message: `无法监听文档库：${errorMessage(error)}`, kind: 'error' })
+        .pushToast({ message: `${t('toast.watchFailed')}: ${errorMessage(error)}`, kind: 'error' })
     }
     await get().refreshDocuments()
     set({ bootstrapped: true })
@@ -274,7 +275,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       if (active && active.path === path) {
         // 活动文档被删除：保留内存内容，下次 flush 时重建
         set({ activeDocument: null })
-        useUiStore.getState().pushToast({ message: '文档已移入废纸篓', kind: 'info' })
+        useUiStore.getState().pushToast({ message: t('toast.trashed'), kind: 'info' })
       }
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
@@ -341,7 +342,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
     if (active && event.path === active.path) {
       if (event.kind === 'remove') {
-        useUiStore.getState().pushToast({ message: '文件已在外部删除', kind: 'info' })
+        useUiStore.getState().pushToast({ message: t('toast.externalDeleted'), kind: 'info' })
         void get().refreshDocuments()
         return
       }

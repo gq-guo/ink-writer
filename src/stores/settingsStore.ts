@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import type { AppSettings } from '@/lib/types'
 import { readPersisted, writePersisted } from '@/lib/persist'
+import { syncLocale } from '@/lib/i18n'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   libraryPath: '',
   typewriterMode: false,
   favorites: [],
+  locale: 'system',
 }
 
 export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
@@ -88,6 +90,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings: merged, hydrated: true })
     applySettingsToDocument(merged)
     applyThemeToDocument(merged.theme)
+    syncLocale(merged.locale)
   },
 
   update: (patch) => {
@@ -95,6 +98,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings: next })
     applySettingsToDocument(next)
     applyThemeToDocument(next.theme)
+    syncLocale(next.locale)
     schedulePersist(next)
   },
 

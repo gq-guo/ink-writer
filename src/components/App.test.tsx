@@ -12,6 +12,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({ load: vi.fn().mockResolvedValue(nul
 
 import App from '@/App'
 import { useDocumentStore } from '@/stores/documentStore'
+import { syncLocale } from '@/lib/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 describe('App 启动流程（spec §3 / W1 / W7）', () => {
@@ -19,10 +20,12 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     invokeMock.mockReset()
     invokeMock.mockResolvedValue(undefined)
     window.localStorage.clear()
+    syncLocale('zh-CN')
     useDocumentStore.setState({ documents: [], activeDocument: null, saveState: 'idle' })
   })
 
   it('首次启动没有库目录时显示引导页', async () => {
+    window.localStorage.setItem('ink:settings', JSON.stringify({ locale: 'zh-CN' }))
     render(<App />)
     await waitFor(() => {
       expect(screen.getByText('Ink.')).toBeInTheDocument()

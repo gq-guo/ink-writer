@@ -75,6 +75,9 @@ export const inkThemeSpec = {
   '.cm-md-mark': {
     color: 'var(--secondary)',
   },
+  '.cm-md-heading-text': {
+    color: 'var(--accent)',
+  },
   '.cm-md-url': {
     color: 'var(--secondary)',
   },

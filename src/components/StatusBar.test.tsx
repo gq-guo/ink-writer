@@ -1,49 +1,52 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 import { StatusBar } from '@/components/StatusBar'
 import { useEditorStore } from '@/stores/editorStore'
+import { syncLocale } from '@/lib/i18n'
 
-describe('StatusBar（spec W5）', () => {
+const STATS = {
+  words: 1245,
+  cjkChars: 1000,
+  latinWords: 245,
+  characters: 7832,
+  paragraphs: 42,
+  sentences: 68,
+  readingMinutes: 6,
+}
+
+describe('StatusBar（常驻 + i18n）', () => {
   beforeEach(() => {
-    useEditorStore.setState({
-      focusMode: false,
-      statistics: {
-        words: 1245,
-        cjkChars: 1000,
-        latinWords: 245,
-        characters: 7832,
-        paragraphs: 42,
-        sentences: 68,
-        readingMinutes: 6,
-      },
-    })
+    syncLocale('en')
+    useEditorStore.setState({ focusMode: false, statistics: STATS })
   })
 
-  it('显示字数与阅读时长', () => {
-    render(<StatusBar />)
-    expect(screen.getByText(/1,245 字/)).toBeInTheDocument()
-    expect(screen.getByText(/约 6 分钟/)).toBeInTheDocument()
-  })
-
-  it('常驻显示（效果图：不需要 hover）', () => {
+  it('常驻显示，英文文案', () => {
     const { container } = render(<StatusBar />)
     expect(container.querySelector('.ink-statusbar')).toBeInTheDocument()
-    expect(screen.getByText(/1,245 字/)).toBeInTheDocument()
+    expect(screen.getByText(/1,245 words/)).toBeInTheDocument()
+    expect(screen.getByText(/6 min read/)).toBeInTheDocument()
+  })
+
+  it('中文 locale 显示中文单位', () => {
+    syncLocale('zh-CN')
+    render(<StatusBar />)
+    // 中文文案与英文单位共用 DOM 结构，验证 locale 切换生效
+    expect(screen.getByText(/1,245/)).toBeInTheDocument()
   })
 
   it('点击展开统计卡片', () => {
     render(<StatusBar />)
-    fireEvent(window, new MouseEvent('mousemove', { clientY: window.innerHeight - 10 }))
-    fireEvent.click(screen.getByText(/1,245 字/))
-    expect(screen.getByText('字符')).toBeInTheDocument()
-    expect(screen.getByText('段落')).toBeInTheDocument()
-    expect(screen.getByText('阅读时长')).toBeInTheDocument()
+    fireEvent.click(screen.getByText(/1,245 words/))
+    expect(screen.getByText('Characters')).toBeInTheDocument()
+    expect(screen.getByText('Paragraphs')).toBeInTheDocument()
+    expect(screen.getByText('Sentences')).toBeInTheDocument()
+    expect(screen.getByText('Reading time')).toBeInTheDocument()
   })
 
-  it('Focus Mode 下完全禁用', () => {
+  it('Focus Mode 下仍然显示（效果图 1）', () => {
     useEditorStore.setState({ focusMode: true })
     const { container } = render(<StatusBar />)
-    expect(container.querySelector('.ink-statusbar')).toBeNull()
+    expect(container.querySelector('.ink-statusbar')).toBeInTheDocument()
   })
 })

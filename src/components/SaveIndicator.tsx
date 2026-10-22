@@ -7,8 +7,10 @@
 import { useEffect, useState } from 'react'
 
 import { useDocumentStore } from '@/stores/documentStore'
+import { useT } from '@/lib/i18n'
 
 export function SaveIndicator() {
+  const t = useT()
   const saveState = useDocumentStore((state) => state.saveState)
   const [label, setLabel] = useState('')
 
@@ -18,7 +20,7 @@ export function SaveIndicator() {
     if (saveState === 'saving') {
       // 只有持续超过 300ms 才显示，避免每次保存都闪一下
       const timer = setTimeout(() => {
-        if (!cancelled) setLabel('保存中…')
+        if (!cancelled) setLabel(t('save.saving'))
       }, 300)
       return () => {
         cancelled = true
@@ -27,13 +29,13 @@ export function SaveIndicator() {
     }
 
     const timer = setTimeout(() => {
-      if (!cancelled) setLabel(saveState === 'saved' ? '已保存' : '')
+      if (!cancelled) setLabel(saveState === 'saved' ? t('save.saved') : '')
     }, 0)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [saveState])
+  }, [saveState, t])
 
   if (!label) return null
 

@@ -12,11 +12,17 @@ import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
+import { t } from '@/lib/i18n'
+
+export type CommandGroup = 'file' | 'edit' | 'view' | 'mode' | 'type' | 'doc'
+
+export const GROUP_ORDER: CommandGroup[] = ['file', 'edit', 'view', 'mode', 'type', 'doc']
 
 export interface Command {
   id: string
   title: string
   shortcut?: string
+  group: CommandGroup
   run: () => void | Promise<void>
   /** 返回 false 时在 Palette 中隐藏 */
   when?: () => boolean
@@ -25,14 +31,16 @@ export interface Command {
 export function buildCommands(): Command[] {
   return [
     {
+      group: 'file',
       id: 'doc.new',
-      title: 'New Document',
+      title: t('cmd.doc.new'),
       shortcut: '⌘N',
       run: () => useDocumentStore.getState().createDocument(),
     },
     {
+      group: 'file',
       id: 'doc.open',
-      title: 'Open Document…',
+      title: t('cmd.doc.open'),
       shortcut: '⌘O',
       run: async () => {
         const selected = await openDialog({
@@ -46,38 +54,51 @@ export function buildCommands(): Command[] {
       },
     },
     {
+      group: 'file',
       id: 'doc.save',
-      title: 'Save',
+      title: t('cmd.doc.save'),
       shortcut: '⌘S',
       run: () => useDocumentStore.getState().flushSave(),
     },
     {
+      group: 'edit',
+      id: 'editor.find',
+      title: t('cmd.editor.find'),
+      shortcut: '⌘F',
+      run: () => editorBridge.openFind?.(),
+    },
+    {
+      group: 'view',
       id: 'doc.quickOpen',
-      title: 'Quick Open',
+      title: t('cmd.doc.quickOpen'),
       shortcut: '⌘P',
       run: () => useUiStore.getState().showQuickOpen(),
     },
     {
+      group: 'view',
       id: 'app.palette',
-      title: 'Command Palette',
+      title: t('cmd.app.palette'),
       shortcut: '⌘K',
       run: () => useUiStore.getState().showPalette(),
     },
     {
+      group: 'view',
       id: 'app.sidebar',
-      title: 'Toggle Sidebar',
+      title: t('cmd.app.sidebar'),
       shortcut: '⌥\\',
       run: () => useUiStore.getState().toggleSidebar(),
     },
     {
+      group: 'mode',
       id: 'mode.focus',
-      title: 'Focus Mode',
+      title: t('cmd.mode.focus'),
       shortcut: '⌘⇧F',
       run: () => useEditorStore.getState().toggleFocusMode(),
     },
     {
+      group: 'mode',
       id: 'mode.typewriter',
-      title: 'Typewriter Mode',
+      title: t('cmd.mode.typewriter'),
       shortcut: '⌘⇧T',
       run: () => {
         const settings = useSettingsStore.getState()
@@ -85,83 +106,30 @@ export function buildCommands(): Command[] {
       },
     },
     {
+      group: 'view',
       id: 'app.theme',
-      title: 'Toggle Theme',
+      title: t('cmd.app.theme'),
       shortcut: '⌘⇧D',
       run: () => useSettingsStore.getState().toggleTheme(),
     },
     {
+      group: 'type',
       id: 'font.larger',
-      title: 'Increase Font Size',
+      title: t('cmd.font.larger'),
       shortcut: '⌘=',
       run: () => useSettingsStore.getState().increaseFontSize(),
     },
     {
+      group: 'type',
       id: 'font.smaller',
-      title: 'Decrease Font Size',
+      title: t('cmd.font.smaller'),
       shortcut: '⌘-',
       run: () => useSettingsStore.getState().decreaseFontSize(),
     },
     {
-      id: 'font.family.system',
-      title: 'Font: System',
-      run: () => useSettingsStore.getState().update({ fontFamily: 'system' }),
-    },
-    {
-      id: 'font.family.quattro',
-      title: 'Font: iA Writer Quattro',
-      run: () => useSettingsStore.getState().update({ fontFamily: 'quattro' }),
-    },
-    {
-      id: 'font.family.plex',
-      title: 'Font: IBM Plex Sans',
-      run: () => useSettingsStore.getState().update({ fontFamily: 'plex' }),
-    },
-    {
-      id: 'font.family.serif',
-      title: 'Font: Source Serif',
-      run: () => useSettingsStore.getState().update({ fontFamily: 'serif' }),
-    },
-    {
-      id: 'font.family.mono',
-      title: 'Font: JetBrains Mono',
-      run: () => useSettingsStore.getState().update({ fontFamily: 'mono' }),
-    },
-    {
-      id: 'font.lineHeight.increase',
-      title: 'Increase Line Height',
-      run: () => {
-        const store = useSettingsStore.getState()
-        store.update({ lineHeight: Math.min(2.0, Number((store.settings.lineHeight + 0.1).toFixed(2))) })
-      },
-    },
-    {
-      id: 'font.lineHeight.decrease',
-      title: 'Decrease Line Height',
-      run: () => {
-        const store = useSettingsStore.getState()
-        store.update({ lineHeight: Math.max(1.4, Number((store.settings.lineHeight - 0.1).toFixed(2))) })
-      },
-    },
-    {
-      id: 'editor.width.increase',
-      title: 'Wider Text Column',
-      run: () => {
-        const store = useSettingsStore.getState()
-        store.update({ contentWidth: Math.min(960, store.settings.contentWidth + 40) })
-      },
-    },
-    {
-      id: 'editor.width.decrease',
-      title: 'Narrower Text Column',
-      run: () => {
-        const store = useSettingsStore.getState()
-        store.update({ contentWidth: Math.max(560, store.settings.contentWidth - 40) })
-      },
-    },
-    {
+      group: 'file',
       id: 'export.html',
-      title: 'Export as HTML',
+      title: t('cmd.export.html'),
       shortcut: '⌘⇧E',
       run: async () => {
         const state = useDocumentStore.getState()
@@ -183,15 +151,16 @@ export function buildCommands(): Command[] {
             await invoke('copy_assets', { fromDir: docDir, toDir: targetDir })
           }
 
-          useUiStore.getState().pushToast({ message: '已导出 HTML', kind: 'success' })
+          useUiStore.getState().pushToast({ message: t('toast.exportedHtml'), kind: 'success' })
         } catch (error) {
           useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
         }
       },
     },
     {
+      group: 'file',
       id: 'file.print',
-      title: 'Print…',
+      title: t('cmd.file.print'),
       run: async () => {
         const state = useDocumentStore.getState()
         const active = state.activeDocument
@@ -212,24 +181,9 @@ export function buildCommands(): Command[] {
       },
     },
     {
-      id: 'doc.favorite',
-      title: 'Add to Favorites',
-      run: async () => {
-        const active = useDocumentStore.getState().activeDocument
-        if (!active) return
-        const settings = useSettingsStore.getState()
-        const isFavorite = settings.settings.favorites.includes(active.path)
-        settings.update({
-          favorites: isFavorite
-            ? settings.settings.favorites.filter((path) => path !== active.path)
-            : [...settings.settings.favorites, active.path],
-        })
-      },
-      when: () => useDocumentStore.getState().activeDocument !== null,
-    },
-    {
+      group: 'doc',
       id: 'doc.rename',
-      title: 'Rename Document',
+      title: t('cmd.doc.rename'),
       run: async () => {
         const active = useDocumentStore.getState().activeDocument
         if (!active) return
@@ -240,8 +194,9 @@ export function buildCommands(): Command[] {
       when: () => useDocumentStore.getState().activeDocument !== null,
     },
     {
+      group: 'doc',
       id: 'doc.reveal',
-      title: 'Reveal in Finder',
+      title: t('cmd.doc.reveal'),
       run: async () => {
         const active = useDocumentStore.getState().activeDocument
         if (!active) return
@@ -254,8 +209,9 @@ export function buildCommands(): Command[] {
       when: () => useDocumentStore.getState().activeDocument !== null,
     },
     {
+      group: 'doc',
       id: 'doc.delete',
-      title: 'Move Document to Trash',
+      title: t('cmd.doc.delete'),
       run: async () => {
         const active = useDocumentStore.getState().activeDocument
         if (!active) return

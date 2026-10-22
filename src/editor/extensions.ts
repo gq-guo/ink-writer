@@ -30,7 +30,7 @@ import { focusModeField, inkFocusModePlugin } from './focusMode'
 import { typewriterModeField } from './typewriter'
 import { inkCursorCenteringPlugin } from './centering'
 import { inkStatisticsPlugin } from './statistics'
-import { searchPhrases } from './searchPhrases'
+import { makeSearchPhrases, searchPhrasesCompartment } from './searchPhrases'
 import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
 import { inkLinkHandler } from './links'
@@ -76,7 +76,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
 
     // ── 搜索 ──
     search({ top: true }),
-    searchPhrases,
+    searchPhrasesCompartment.of(makeSearchPhrases('zh-CN')),
     inkSearchPanelPlugin,
     highlightSelectionMatches(),
 

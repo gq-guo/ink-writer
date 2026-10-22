@@ -5,25 +5,27 @@
  * 改动即时生效（只改 CSS variables，不重建 EditorView）。
  */
 import { useSettingsStore, FONT_STACKS } from '@/stores/settingsStore'
+import { useT } from '@/lib/i18n'
 import type { AppSettings } from '@/lib/types'
 
-const FONT_LABELS: Record<AppSettings['fontFamily'], string> = {
-  system: '系统字体',
-  quattro: 'iA Writer Quattro',
-  plex: 'IBM Plex Sans',
-  serif: '衬线体',
-  mono: '等宽字体',
+const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string | null> = {
+  system: 'type.font.system',
+  quattro: null,
+  plex: null,
+  serif: 'type.font.serif',
+  mono: 'type.font.mono',
 }
 
 export function TypographyPopover({ onClose }: { onClose: () => void }) {
+  const t = useT()
   const settings = useSettingsStore((state) => state.settings)
   const update = useSettingsStore((state) => state.update)
 
   return (
     <div className="ink-popover" role="dialog" aria-label="排版">
-      <div className="ink-popover-title">写作字体</div>
+      <div className="ink-popover-title">{t('type.title')}</div>
       <div className="ink-font-list">
-        {(Object.keys(FONT_LABELS) as AppSettings['fontFamily'][]).map((family) => (
+        {(Object.keys(FONT_LABEL_KEYS) as AppSettings['fontFamily'][]).map((family) => (
           <button
             key={family}
             className="ink-font-item"
@@ -31,13 +33,13 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
             style={{ fontFamily: FONT_STACKS[family] }}
             onClick={() => update({ fontFamily: family })}
           >
-            {FONT_LABELS[family]}
+            {FONT_LABEL_KEYS[family] ? t(FONT_LABEL_KEYS[family]!) : family}
           </button>
         ))}
       </div>
 
       <div className="ink-popover-row">
-        <span>字号</span>
+        <span>{t('type.fontSize')}</span>
         <div className="ink-stepper">
           <button onClick={() => update({ fontSize: settings.fontSize - 1 })}>−</button>
           <span>{settings.fontSize}px</span>
@@ -46,7 +48,7 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="ink-popover-row">
-        <span>行高</span>
+        <span>{t('type.lineHeight')}</span>
         <div className="ink-stepper">
           <button
             onClick={() =>
@@ -71,7 +73,7 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="ink-popover-row">
-        <span>栏宽</span>
+        <span>{t('type.columnWidth')}</span>
         <div className="ink-stepper">
           <button onClick={() => update({ contentWidth: settings.contentWidth - 40 })}>−</button>
           <span>{settings.contentWidth}px</span>
@@ -80,7 +82,7 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
       </div>
 
       <button className="ink-popover-close" onClick={onClose}>
-        完成
+        {t('type.done')}
       </button>
     </div>
   )

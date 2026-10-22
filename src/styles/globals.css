@@ -735,7 +735,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-doc-item[data-active='true'] {
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
 
 .ink-doc-item:hover:not([data-active='true']) {
@@ -868,12 +868,28 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 
 .ink-overlay-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 10px;
   border-radius: 6px;
   font-size: 13px;
+}
+
+.ink-qo-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ink-qo-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--secondary);
 }
 
 .ink-overlay-item[data-selected='true'] {

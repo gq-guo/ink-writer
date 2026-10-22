@@ -105,6 +105,10 @@ export function buildDecorations(
           case 'SetextHeading1':
           case 'SetextHeading2': {
             addLineRangeClass(node.from, node.to, HEADING_CLASS[name]!)
+            // 标题文字用 accent 色（效果图：# Hello World 整体蓝色），
+            // 内容区间 = 首个标记之后 ~ 末尾标记之前
+            const content = contentBetweenMarkers(node)
+            if (content) addMark(content.from, content.to, 'cm-md-heading-text')
             break
           }
           case 'HeaderMark':

@@ -9,6 +9,8 @@ export interface EditorBridge {
   revealRange: (range: [number, number]) => void
   getContent: () => string
   focus: () => void
+  /** 打开查找面板（⌘F） */
+  openFind?: () => void
 }
 
 let bridge: EditorBridge | null = null
@@ -26,5 +28,6 @@ export const editorBridge = {
   revealRange: (range: [number, number]) => bridge?.revealRange(range),
   getContent: () => bridge?.getContent() ?? '',
   focus: () => bridge?.focus(),
+  openFind: () => bridge?.openFind?.(),
   isReady: () => bridge !== null,
 }

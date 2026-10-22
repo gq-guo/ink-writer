@@ -8,9 +8,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useT } from '@/lib/i18n'
 import { useUiStore } from '@/stores/uiStore'
 
 export function LibraryBootstrap() {
+  const t = useT()
   const setLibraryPath = useSettingsStore((state) => state.setLibraryPath)
   const [defaultPath, setDefaultPath] = useState('')
 
@@ -20,12 +22,13 @@ export function LibraryBootstrap() {
     })
   }, [])
 
+
   const confirm = async (path: string) => {
     if (!path) return
     try {
       await invoke('ensure_directory', { path })
     } catch (error) {
-      useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+      useUiStore.getState().pushToast({ message: `${t('toast.createDirFailed')}: ${String(error)}`, kind: 'error' })
       return
     }
     setLibraryPath(path)
@@ -44,17 +47,17 @@ export function LibraryBootstrap() {
       <div className="ink-bootstrap-sub">Your words stay on your Mac.</div>
       <div className="flex flex-col items-center gap-2">
         <button className="ink-button" data-primary="true" onClick={() => void chooseDirectory()}>
-          选择文档库位置
+          {t('bootstrap.choose')}
         </button>
         {defaultPath ? (
           <button className="ink-button" onClick={() => void confirm(defaultPath)}>
-            使用默认位置 {defaultPath.replace(/^\/Users\/[^/]+/, '~')}
+            {t('bootstrap.useDefault')} {defaultPath.replace(/^\/Users\/[^/]+/, '~')}
           </button>
         ) : null}
       </div>
       {defaultPath ? (
         <div className="mt-1 text-xs" style={{ color: 'var(--secondary)' }}>
-          默认 ~/Documents/Ink
+          {t('bootstrap.defaultHint')}
         </div>
       ) : null}
     </div>

@@ -4,10 +4,12 @@
  * 模态，必须三选一；选择前阻塞自动保存写入。
  */
 import { OverlayShell } from './OverlayShell'
+import { useT } from '@/lib/i18n'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 
 export function ConflictDialog() {
+  const t = useT()
   const conflict = useEditorStore((state) => state.conflict)
   const resolveConflict = useDocumentStore((state) => state.resolveConflict)
 
@@ -18,24 +20,24 @@ export function ConflictDialog() {
   return (
     <OverlayShell onClose={() => undefined} variant="dialog" label="文件冲突">
       <div className="ink-dialog-title">
-        “{fileName}” 已被其他应用修改。
+        “{fileName}” {t('conflict.message')}
       </div>
       <div className="ink-dialog-actions">
         <button
           className="ink-button"
           onClick={() => void resolveConflict('save-copy')}
         >
-          另存副本…
+          {t('conflict.saveCopy')}
         </button>
         <button className="ink-button" onClick={() => void resolveConflict('load-disk')}>
-          加载磁盘版本
+          {t('conflict.loadDisk')}
         </button>
         <button
           className="ink-button"
           data-primary="true"
           onClick={() => void resolveConflict('keep-mine')}
         >
-          保留我的版本
+          {t('conflict.keepMine')}
         </button>
       </div>
     </OverlayShell>

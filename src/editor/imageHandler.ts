@@ -7,6 +7,7 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import { EditorView } from '@codemirror/view'
+import { t } from '@/lib/i18n'
 
 export interface ImageHandlerOptions {
   /** 当前文档所在目录 */
@@ -33,7 +34,7 @@ async function insertImages(
 ): Promise<void> {
   const docDir = options.getDocDir()
   if (!docDir) {
-    options.onError('请先打开一个文档再插入图片')
+    options.onError(t('toast.imageNoDoc'))
     return
   }
 

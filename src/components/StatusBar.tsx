@@ -7,12 +7,13 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
+import { useT } from '@/lib/i18n'
 import { useEditorStore } from '@/stores/editorStore'
 import { SidebarToggle } from './TopBar'
 
 export function StatusBar() {
+  const t = useT()
   const statistics = useEditorStore((state) => state.statistics)
-  const focusMode = useEditorStore((state) => state.focusMode)
 
   const [expanded, setExpanded] = useState(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -26,8 +27,7 @@ export function StatusBar() {
     return () => window.removeEventListener('mousedown', onDown)
   }, [expanded])
 
-  if (focusMode) return null
-
+  // 效果图 1：Focus Mode 下底部栏仍显示（字数 + 侧栏开关）
   return (
     <>
       <div className="ink-statusbar">
@@ -38,36 +38,36 @@ export function StatusBar() {
           role="button"
           tabIndex={0}
         >
-          {formatNumber(statistics.words)} 字&nbsp;&nbsp;约 {statistics.readingMinutes} 分钟
+          {formatNumber(statistics.words)} {t('common.wordsUnit')}&nbsp;&nbsp;·&nbsp;&nbsp;{statistics.readingMinutes} {t('common.minReadUnit')}
         </button>
       </div>
 
       {expanded ? (
         <div className="ink-status-card" ref={cardRef}>
           <div className="ink-status-head">
-            <strong>{formatNumber(statistics.words)}</strong> 字
-            <span>≈ {statistics.readingMinutes} 分钟</span>
+            <strong>{formatNumber(statistics.words)}</strong> {t('common.wordsUnit')}
+            <span>≈ {statistics.readingMinutes} {t('common.minReadUnit')}</span>
           </div>
           <dl>
             <div className="ink-status-row">
-              <dt>字数</dt>
+              <dt>{t('stats.words')}</dt>
               <dd>{formatNumber(statistics.words)}</dd>
             </div>
             <div className="ink-status-row">
-              <dt>字符</dt>
+              <dt>{t('stats.characters')}</dt>
               <dd>{formatNumber(statistics.characters)}</dd>
             </div>
             <div className="ink-status-row">
-              <dt>段落</dt>
+              <dt>{t('stats.paragraphs')}</dt>
               <dd>{formatNumber(statistics.paragraphs)}</dd>
             </div>
             <div className="ink-status-row">
-              <dt>句子</dt>
+              <dt>{t('stats.sentences')}</dt>
               <dd>{formatNumber(statistics.sentences)}</dd>
             </div>
             <div className="ink-status-row">
-              <dt>阅读时长</dt>
-              <dd>{statistics.readingMinutes} 分钟</dd>
+              <dt>{t('stats.readingTime')}</dt>
+              <dd>{statistics.readingMinutes} min</dd>
             </div>
           </dl>
         </div>

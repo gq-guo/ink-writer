@@ -4,12 +4,16 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { EditorState, type Extension, type StateEffect } from '@codemirror/state'
 import { EditorView, type ViewUpdate } from '@codemirror/view'
+import { openSearchPanel } from '@codemirror/search'
 import { invoke } from '@tauri-apps/api/core'
 
 import { createInkExtensions } from '@/editor/extensions'
 import { setFocusModeEffect } from '@/editor/focusMode'
 import { darkCompartment, inkDarkExtension } from '@/editor/theme'
 import { runCenteringSelfTest } from '@/editor/selftest'
+import { makeSearchPhrases, searchPhrasesCompartment } from '@/editor/searchPhrases'
+import { useLocaleStore } from '@/lib/i18n'
+import { useT } from '@/lib/i18n'
 import { highlightCompartment, isPerformanceMode, noHighlightStyle } from '@/editor/performance'
 import { inkSyntaxHighlighting } from '@/editor/highlight'
 import { setTypewriterModeEffect } from '@/editor/typewriter'
@@ -32,6 +36,7 @@ export function EditorHost() {
 
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const activePath = activeDocument?.path
+  const t = useT()
   const performanceMode = activeDocument ? isPerformanceMode(activeDocument.size) : false
   const performanceNotifiedRef = useRef(false)
   const prevFocusRef = useRef(false)
@@ -162,6 +167,7 @@ export function EditorHost() {
       },
       getContent: () => textRef.current,
       focus: () => view.focus(),
+      openFind: () => openSearchPanel(view),
     })
 
     return () => {
@@ -188,7 +194,7 @@ export function EditorHost() {
         setTypewriterModeEffect.of(currentTypewriterMode()),
       ],
     })
-  }, [activePath, currentFocusMode, currentTypewriterMode, syncDarkFlag])
+  }, [activePath, currentFocusMode, currentTypewriterMode, syncDarkFlag, t])
 
   // ── 大文件性能模式（spec §18.2）──
   useEffect(() => {
@@ -202,13 +208,19 @@ export function EditorHost() {
     if (performanceMode) {
       if (!performanceNotifiedRef.current) {
         performanceNotifiedRef.current = true
-        useUiStore.getState().pushToast({
-          message: '文档超过 10MB，已进入性能模式（关闭语法高亮与 Focus Mode）',
-          kind: 'info',
-        })
+        useUiStore.getState().pushToast({ message: t('toast.perfMode'), kind: 'info' })
       }
     }
-  }, [performanceMode])
+  }, [performanceMode, t])
+
+  // ── 语言切换：同步查找面板的文案 ──
+  const locale = useLocaleStore((state) => state.locale)
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
+    })
+  }, [locale])
 
   // ── 主题切换：同步 CM6 的深浅变体 ──
   const theme = useSettingsStore((state) => state.settings.theme)
@@ -259,8 +271,8 @@ export function EditorHost() {
     <div ref={containerRef} className="relative h-full w-full overflow-hidden">
       {isEmpty ? (
         <div className="ink-empty-guide">
-          <div className="ink-empty-title">Start writing.</div>
-          <div className="ink-empty-sub">写下你的第一个想法…</div>
+          <div className="ink-empty-title">{t('empty.start')}</div>
+          <div className="ink-empty-sub">{t('empty.firstThought')}</div>
         </div>
       ) : null}
     </div>

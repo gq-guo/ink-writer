@@ -64,6 +64,8 @@ export interface AppSettings {
   typewriterMode: boolean
   /** 收藏的文档（绝对路径） */
   favorites: string[]
+  /** 界面语言：跟随系统 / 简体中文 / English */
+  locale: 'system' | 'zh-CN' | 'en'
 }
 
 /** Rust `read_document` 的返回 */

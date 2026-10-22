@@ -11,12 +11,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
-import { GROUP_LABELS, GROUP_ORDER, groupFor, relativeTime, type DateGroup } from '@/lib/format'
+import { GROUP_ORDER, groupFor, relativeTime, type DateGroup } from '@/lib/format'
+import { useT } from '@/lib/i18n'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useUiStore, type SidebarView } from '@/stores/uiStore'
+import { useUiStore } from '@/stores/uiStore'
 import type { DocumentMeta } from '@/lib/types'
 
 /** 超过该数量启用虚拟化（spec §4.3.3） */
@@ -34,11 +35,7 @@ interface ContextMenuState {
   document: DocumentMeta
 }
 
-const NAV_ITEMS: { view: SidebarView; label: string; icon: string }[] = [
-  { view: 'all', label: 'All Documents', icon: 'ink-icon-file' },
-  { view: 'recent', label: 'Recent', icon: 'ink-icon-clock' },
-  { view: 'favorites', label: 'Favorites', icon: 'ink-icon-star' },
-]
+
 
 export function Sidebar() {
   const visible = useUiStore((state) => state.sidebarVisible)
@@ -57,6 +54,7 @@ export function Sidebar() {
   const updateSettings = useSettingsStore((state) => state.update)
   const focusMode = useEditorStore((state) => state.focusMode)
 
+  const t = useT()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -132,7 +130,7 @@ export function Sidebar() {
   const renderItem = useCallback(
     (item: ListItem) => {
       if (item.kind === 'group') {
-        return <div className="ink-group-label">{GROUP_LABELS[item.group]}</div>
+        return <div className="ink-group-label">{t(`sidebar.group.${item.group}`)}</div>
       }
       const document = item.document
       const isActive = activeDocument?.path === document.path
@@ -185,7 +183,7 @@ export function Sidebar() {
         </div>
       )
     },
-    [activeDocument?.path, commitRename, favorites, openDocument, renameValue, renamingPath],
+    [activeDocument?.path, commitRename, favorites, openDocument, renameValue, renamingPath, t],
   )
 
   const hidden = !visible || focusMode
@@ -195,21 +193,27 @@ export function Sidebar() {
       <div className="ink-sidebar-head">
         <span className="ink-icon ink-icon-feather ink-brand" aria-hidden />
         <span className="ink-brand-name">ink</span>
-        <button className="ink-icon-btn ink-collapse" title="折叠侧边栏" onClick={toggleSidebar}>
+        <button className="ink-icon-btn ink-collapse" title={t('sidebar.collapse')} onClick={toggleSidebar}>
           <span className="ink-icon ink-icon-panel" aria-hidden />
         </button>
       </div>
 
       <nav className="ink-sidebar-nav">
-        {NAV_ITEMS.map((item) => (
+        {(
+          [
+            ['all', 'sidebar.all', 'ink-icon-file'],
+            ['recent', 'sidebar.recent', 'ink-icon-clock'],
+            ['favorites', 'sidebar.favorites', 'ink-icon-star'],
+          ] as const
+        ).map(([itemView, labelKey, icon]) => (
           <button
-            key={item.view}
+            key={itemView}
             className="ink-nav-item"
-            data-active={view === item.view}
-            onClick={() => setSidebarView(item.view)}
+            data-active={view === itemView}
+            onClick={() => setSidebarView(itemView)}
           >
-            <span className={`ink-icon ${item.icon}`} aria-hidden />
-            {item.label}
+            <span className={`ink-icon ${icon}`} aria-hidden />
+            {t(labelKey)}
           </button>
         ))}
       </nav>
@@ -217,7 +221,7 @@ export function Sidebar() {
       <div className="min-h-0 flex-1 overflow-hidden py-2">
         {items.length === 0 ? (
           <div className="px-3 py-2 text-xs" style={{ color: 'var(--secondary)' }}>
-            {view === 'favorites' ? '还没有收藏' : '文档库还是空的'}
+            {t(view === 'favorites' ? 'sidebar.empty.favorites' : 'sidebar.empty.library')}
           </div>
         ) : documents.length > VIRTUALIZE_THRESHOLD ? (
           <Virtuoso
@@ -239,7 +243,7 @@ export function Sidebar() {
       <div className="ink-sidebar-foot">
         <button className="ink-nav-item" onClick={() => void createDocument()}>
           <span className="ink-icon ink-icon-plus" aria-hidden />
-          New Document
+          {t('sidebar.newDocument')}
         </button>
       </div>
 
@@ -309,6 +313,7 @@ function ContextMenu({
   onFavorite,
   onDelete,
 }: ContextMenuProps) {
+  const t = useT()
   useEffect(() => {
     const close = () => onClose()
     window.addEventListener('mousedown', close)
@@ -320,11 +325,15 @@ function ContextMenu({
   }, [onClose])
 
   const items: { label: string; action: () => void; icon?: string; danger?: boolean }[] = [
-    { label: 'Open', action: onOpen, icon: 'ink-icon-file' },
-    { label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites', action: onFavorite, icon: 'ink-icon-star' },
-    { label: 'Rename…', action: onRename, icon: 'ink-icon-file' },
-    { label: 'Reveal in Finder', action: onReveal, icon: 'ink-icon-folder' },
-    { label: 'Move to Trash', action: onDelete, danger: true },
+    { label: t('sidebar.context.open'), action: onOpen, icon: 'ink-icon-file' },
+    {
+      label: t(isFavorite ? 'sidebar.context.removeFavorite' : 'sidebar.context.addFavorite'),
+      action: onFavorite,
+      icon: 'ink-icon-star',
+    },
+    { label: t('sidebar.context.rename'), action: onRename, icon: 'ink-icon-file' },
+    { label: t('sidebar.context.reveal'), action: onReveal, icon: 'ink-icon-folder' },
+    { label: t('sidebar.context.trash'), action: onDelete, danger: true },
   ]
 
   return (

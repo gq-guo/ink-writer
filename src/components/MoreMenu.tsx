@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { buildCommands } from '@/commands/registry'
+import { useT } from '@/lib/i18n'
 
 export function MoreMenu({ onClose }: { onClose: () => void }) {
   const activeDocument = useDocumentStore((state) => state.activeDocument)
@@ -16,11 +17,20 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
   const favorites = useSettingsStore((state) => state.settings.favorites)
   const updateSettings = useSettingsStore((state) => state.update)
 
+  const t = useT()
+  const locale = useSettingsStore((state) => state.settings.locale)
+
+  const LANG_OPTIONS = [
+    ['system', 'menu.lang.system'],
+    ['zh-CN', 'menu.lang.zh'],
+    ['en', 'menu.lang.en'],
+  ] as const
+
   if (!activeDocument) {
     return (
       <div className="ink-popover ink-menu" role="menu">
         <div className="ink-menu-item" data-disabled="true">
-          没有打开的文档
+          {t('menu.noDocument')}
         </div>
       </div>
     )
@@ -48,7 +58,7 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
     <div className="ink-popover ink-menu" role="menu">
       <button className="ink-menu-item" onClick={toggleFavorite}>
         <span className="ink-icon ink-icon-star" aria-hidden />
-        {isFavorite ? '取消收藏' : '加入收藏'}
+        {t(isFavorite ? 'menu.favorite.remove' : 'menu.favorite.add')}
       </button>
 
       <div className="ink-menu-sep" />
@@ -56,13 +66,13 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
       <button
         className="ink-menu-item"
         onClick={() => {
-          const name = window.prompt('重命名文档', activeDocument.fileName.replace(/\.md$/i, ''))
+          const name = window.prompt(t('menu.rename'), activeDocument.fileName.replace(/\.md$/i, ''))
           if (name) void renameDocument(activeDocument.path, name)
           onClose()
         }}
       >
         <span className="ink-icon ink-icon-file" aria-hidden />
-        重命名…
+        {t('menu.rename')}
       </button>
 
       <button
@@ -73,16 +83,16 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
         }}
       >
         <span className="ink-icon ink-icon-folder" aria-hidden />
-        在访达中显示
+        {t('menu.reveal')}
       </button>
 
       <div className="ink-menu-sep" />
 
       <button className="ink-menu-item" onClick={() => void runCommand('export.html')}>
-        导出 HTML
+        {t('menu.exportHtml')}
       </button>
       <button className="ink-menu-item" onClick={() => void runCommand('file.print')}>
-        打印…
+        {t('menu.print')}
       </button>
 
       <div className="ink-menu-sep" />
@@ -95,8 +105,25 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
           onClose()
         }}
       >
-        移入废纸篓
+        {t('menu.trash')}
       </button>
+
+      <div className="ink-menu-sep" />
+
+      <div className="ink-menu-item" data-disabled="true">
+        {t('menu.language')}
+      </div>
+      {LANG_OPTIONS.map(([value, labelKey]) => (
+        <button
+          key={value}
+          className="ink-menu-item"
+          data-checked={locale === value ? 'true' : undefined}
+          onClick={() => updateSettings({ locale: value })}
+        >
+          <span className={`ink-icon ${locale === value ? 'ink-icon-check' : ''}`} aria-hidden />
+          {t(labelKey)}
+        </button>
+      ))}
     </div>
   )
 }

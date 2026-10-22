@@ -11,6 +11,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { OverlayShell } from './OverlayShell'
 import { fuzzyScorePath } from '@/lib/fuzzy'
 import { relativeTime } from '@/lib/format'
+import { useT } from '@/lib/i18n'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { DocumentMeta, SearchHit } from '@/lib/types'
@@ -37,6 +38,7 @@ export function QuickOpen() {
   const documents = useDocumentStore((state) => state.documents)
   const openDocument = useDocumentStore((state) => state.openDocument)
 
+  const t = useT()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const [contentHits, setContentHits] = useState<SearchHit[]>([])
@@ -119,7 +121,7 @@ export function QuickOpen() {
       <input
         ref={inputRef}
         className="ink-overlay-input"
-        placeholder="Search documents..."
+        placeholder={t('quickOpen.placeholder')}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value)
@@ -141,7 +143,7 @@ export function QuickOpen() {
 
       <div className="ink-overlay-list">
         {fileResults.length === 0 && contentHits.length === 0 ? (
-          <div className="ink-overlay-empty">No matching documents</div>
+          <div className="ink-overlay-empty">{t('quickOpen.empty')}</div>
         ) : null}
 
         {fileResults.map((item, index) => (
@@ -155,14 +157,17 @@ export function QuickOpen() {
               void openDocument(item.document.path)
             }}
           >
-            <span className="truncate">{item.document.displayTitle || item.document.fileName}</span>
+            <span className="ink-qo-title">
+              <span className="ink-icon ink-icon-file ink-qo-icon" aria-hidden />
+              {item.document.displayTitle || item.document.fileName}
+            </span>
             <span className="ink-overlay-sub">{relativeTime(item.document.mtime)}</span>
           </div>
         ))}
 
         {contentHits.length > 0 ? (
           <>
-            <div className="ink-overlay-group">In documents</div>
+            <div className="ink-overlay-group">{t('quickOpen.contentGroup')}</div>
             {contentHits.map((hit, index) => {
               const absoluteIndex = fileResults.length + index
               return (

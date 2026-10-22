@@ -1,14 +1,16 @@
 /**
- * Command Palette（spec W4 / §11.3）
+ * Command Palette（spec W4 / 效果图 2 · 7）
  *
- * 结构与 Quick Open 相同；模糊匹配 + 最近使用置顶；带快捷键的命令右对齐显示快捷键。
+ * - 命令按「文件 / 编辑 / 视图 / 模式 / 排版 / 文档」分组，带分区标题
+ * - 模糊匹配 + 最近使用置顶；带快捷键的命令右对齐显示快捷键
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { OverlayShell } from './OverlayShell'
 import { fuzzyScore } from '@/lib/fuzzy'
-import { buildCommands, type Command } from '@/commands/registry'
+import { buildCommands, GROUP_ORDER, type Command, type CommandGroup } from '@/commands/registry'
 import { useUiStore } from '@/stores/uiStore'
+import { useLocaleStore, useT } from '@/lib/i18n'
 
 interface ScoredCommand {
   command: Command
@@ -16,61 +18,78 @@ interface ScoredCommand {
   recent: boolean
 }
 
+type Row = { kind: 'header'; group: CommandGroup } | { kind: 'command'; item: ScoredCommand }
+
 export function CommandPalette() {
   const visible = useUiStore((state) => state.paletteVisible)
   const hide = useUiStore((state) => state.hidePalette)
   const recentCommands = useUiStore((state) => state.recentCommands)
   const pushRecentCommand = useUiStore((state) => state.pushRecentCommand)
 
+  const t = useT()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const commands = useMemo(() => buildCommands(), [])
+  // 语言切换时重建命令表（标题需要重新翻译）
+  const locale = useLocaleStore((state) => state.locale)
+  const commands = useMemo(() => {
+    void locale
+    return buildCommands()
+  }, [locale])
 
   useEffect(() => {
     if (!visible) return
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [visible])
 
-  const results = useMemo<ScoredCommand[]>(() => {
+  /** 过滤 + 评分（保持命令注册顺序，组内稳定） */
+  const scored = useMemo<ScoredCommand[]>(() => {
     const available = commands.filter((command) => command.when?.() ?? true)
     const trimmed = query.trim()
 
-    const scored: ScoredCommand[] = []
-    for (const command of available) {
+    return available.flatMap((command, index) => {
       const recent = recentCommands.includes(command.id)
-      if (!trimmed) {
-        scored.push({ command, score: 0, recent })
-        continue
-      }
+      if (!trimmed) return [{ command, score: index, recent }]
       const hit = fuzzyScore(trimmed, command.title)
-      if (!hit) continue
-      scored.push({ command, score: hit.score + (recent ? 1000 : 0), recent })
-    }
-
-    scored.sort((a, b) => {
-      if (a.recent !== b.recent) return a.recent ? -1 : 1
-      return b.score - a.score
+      if (!hit) return []
+      return [{ command, score: hit.score + (recent ? 1000 : 0), recent }]
     })
-    return scored
   }, [commands, query, recentCommands])
+
+  /** 按分组组装行（分区标题 + 命令） */
+  const rows = useMemo<Row[]>(() => {
+    const result: Row[] = []
+    for (const group of GROUP_ORDER) {
+      const items = scored.filter((item) => item.command.group === group)
+      if (items.length === 0) continue
+      // 有查询时按评分排序（最近使用置顶已由分数体现）；无查询保持注册顺序
+      if (query.trim()) items.sort((a, b) => b.score - a.score)
+      result.push({ kind: 'header', group })
+      for (const item of items) result.push({ kind: 'command', item })
+    }
+    return result
+  }, [scored, query])
+
+  const commandRows = rows.filter((row) => row.kind === 'command') as Extract<Row, { kind: 'command' }>[]
 
   if (!visible) return null
 
   const runSelected = () => {
-    const item = results[selected]
-    if (!item) return
+    const target = commandRows[selected]
+    if (!target) return
     hide()
-    pushRecentCommand(item.command.id)
-    void item.command.run()
+    pushRecentCommand(target.item.command.id)
+    void target.item.command.run()
   }
+
+  let commandIndex = -1
 
   return (
     <OverlayShell onClose={hide} label="Command Palette">
       <input
         ref={inputRef}
         className="ink-overlay-input"
-        placeholder="Type a command..."
+        placeholder={t('palette.placeholder')}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value)
@@ -79,7 +98,7 @@ export function CommandPalette() {
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
             event.preventDefault()
-            setSelected((index) => Math.min(index + 1, results.length - 1))
+            setSelected((index) => Math.min(index + 1, commandRows.length - 1))
           } else if (event.key === 'ArrowUp') {
             event.preventDefault()
             setSelected((index) => Math.max(index - 1, 0))
@@ -91,30 +110,42 @@ export function CommandPalette() {
       />
 
       <div className="ink-overlay-list">
-        {results.length === 0 ? (
-          <div className="ink-overlay-empty">No matching commands</div>
+        {commandRows.length === 0 ? (
+          <div className="ink-overlay-empty">{t('palette.empty')}</div>
         ) : null}
-        {results.map((item, index) => (
-          <div
-            key={item.command.id}
-            className="ink-overlay-item"
-            data-selected={index === selected}
-            onMouseEnter={() => setSelected(index)}
-            onClick={() => {
-              hide()
-              pushRecentCommand(item.command.id)
-              void item.command.run()
-            }}
-          >
-            <span className="truncate">
-              {item.recent ? '⟳ ' : ''}
-              {item.command.title}
-            </span>
-            {item.command.shortcut ? (
-              <span className="ink-overlay-sub">{item.command.shortcut}</span>
-            ) : null}
-          </div>
-        ))}
+        {rows.map((row) => {
+          if (row.kind === 'header') {
+            return (
+              <div key={`group-${row.group}`} className="ink-overlay-group">
+                {t(`palette.group.${row.group}`)}
+              </div>
+            )
+          }
+          commandIndex += 1
+          const index = commandIndex
+          const { command, recent } = row.item
+          return (
+            <div
+              key={command.id}
+              className="ink-overlay-item"
+              data-selected={index === selected}
+              onMouseEnter={() => setSelected(index)}
+              onClick={() => {
+                hide()
+                pushRecentCommand(command.id)
+                void command.run()
+              }}
+            >
+              <span className="truncate">
+                {recent ? '⟳ ' : ''}
+                {command.title}
+              </span>
+              {command.shortcut ? (
+                <span className="ink-overlay-sub">{command.shortcut}</span>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
     </OverlayShell>
   )

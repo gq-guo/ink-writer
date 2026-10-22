@@ -240,6 +240,7 @@ async function renderShell(): Promise<void> {
       libraryPath: '/library',
       typewriterMode: false,
       favorites: ['/library/Blog Post.md'],
+      locale: 'system',
     },
   })
   useUiStore.setState({ sidebarVisible: true, sidebarWidth: 240, sidebarView: 'all' })

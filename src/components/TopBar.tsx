@@ -10,6 +10,7 @@ import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
+import { useT } from '@/lib/i18n'
 import { TypographyPopover } from './TypographyPopover'
 import { MoreMenu } from './MoreMenu'
 
@@ -20,6 +21,7 @@ export function TopBar() {
   const typewriterMode = useSettingsStore((state) => state.settings.typewriterMode)
   const showQuickOpen = useUiStore((state) => state.showQuickOpen)
 
+  const t = useT()
   const [typographyOpen, setTypographyOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement | null>(null)
@@ -42,7 +44,7 @@ export function TopBar() {
         {fileName ? (
           <button
             className="ink-topbar-name"
-            title="重命名"
+            title={t('topbar.rename')}
             onClick={() => {
               const name = window.prompt('重命名文档', fileName.replace(/\.md$/i, ''))
               if (name && activeDocument) void renameDocument(activeDocument.path, name)
@@ -57,26 +59,26 @@ export function TopBar() {
         {focusMode ? (
           <span className="ink-mode-pill">
             <span className="ink-icon ink-icon-target" aria-hidden />
-            Focus Mode
+            {t('topbar.focusMode')}
           </span>
         ) : null}
         {typewriterMode ? (
           <span className="ink-mode-pill">
             <span className="ink-icon ink-icon-feather" aria-hidden />
-            Typewriter
+            {t('topbar.typewriter')}
           </span>
         ) : null}
       </div>
 
       <div className="ink-topbar-right">
-        <button className="ink-icon-btn" title="搜索文档（⌘P）" onClick={showQuickOpen}>
+        <button className="ink-icon-btn" title={t('topbar.search')} onClick={showQuickOpen}>
           <span className="ink-icon ink-icon-search" aria-hidden />
         </button>
 
         <div className="ink-popover-anchor">
           <button
             className="ink-icon-btn ink-aa-btn"
-            title="排版"
+            title={t('topbar.typography')}
             onClick={() => {
               setTypographyOpen((open) => !open)
               setMenuOpen(false)
@@ -92,7 +94,7 @@ export function TopBar() {
         <div className="ink-popover-anchor" ref={moreRef}>
           <button
             className="ink-icon-btn"
-            title="更多"
+            title={t('topbar.more')}
             onClick={() => {
               setMenuOpen((open) => !open)
               setTypographyOpen(false)
@@ -109,12 +111,13 @@ export function TopBar() {
 
 /** 侧边栏开关（效果图左下角） */
 export function SidebarToggle() {
+  const t = useT()
   const visible = useUiStore((state) => state.sidebarVisible)
   const toggle = useUiStore((state) => state.toggleSidebar)
   return (
     <button
       className="ink-icon-btn ink-sidebar-toggle"
-      title={visible ? '隐藏侧边栏' : '显示侧边栏'}
+      title={t(visible ? 'topbar.hideSidebar' : 'topbar.showSidebar')}
       onClick={toggle}
     >
       <span className="ink-icon ink-icon-panel" aria-hidden />
