@@ -140,7 +140,7 @@ export function Sidebar() {
         <div
           className="ink-doc-item"
           data-active={isActive}
-          title={document.fileName}
+          title={`${document.dirPrefix}${document.fileName}`}
           onClick={() => {
             if (!isRenaming) void openDocument(document.path)
           }}

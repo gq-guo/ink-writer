@@ -18,6 +18,7 @@ const DOC = {
   content: '',
   originalEncoding: 'utf-8' as const,
   displayTitle: 'Untitled',
+  titleFromH1: false,
   openSeq: 1,
 }
 

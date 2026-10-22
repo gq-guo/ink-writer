@@ -20,7 +20,7 @@ import type {
   SaveState,
   WriteResult,
 } from '@/lib/types'
-import { extractDisplayTitle } from '@/lib/title'
+import { extractDisplayTitle, extractTitleInfo, titleComesFromH1 } from '@/lib/title'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from './editorStore'
@@ -206,6 +206,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         content: result.content,
         originalEncoding: (result.encoding as Document['originalEncoding']) ?? 'unknown',
         displayTitle: extractDisplayTitle(result.content, fileName),
+        titleFromH1: titleComesFromH1(result.content),
         openSeq: ++openSeqCounter,
       }
       pendingText = null
@@ -273,6 +274,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
             path: newPath,
             fileName: safeName,
             displayTitle: extractDisplayTitle(active.content, safeName),
+            titleFromH1: titleComesFromH1(active.content),
           },
         })
       }
@@ -424,15 +426,17 @@ function refreshActiveTitle() {
   const active = state.activeDocument
   if (!active) return
   const text = pendingText ?? active.content
-  const title = extractDisplayTitle(text, active.fileName)
-  if (title === active.displayTitle) return
+  const info = extractTitleInfo(text, active.fileName)
+  if (info.title === active.displayTitle && info.fromH1 === active.titleFromH1) return
 
   useDocumentStore.setState((s) => ({
     activeDocument: s.activeDocument
-      ? { ...s.activeDocument, displayTitle: title }
+      ? { ...s.activeDocument, displayTitle: info.title, titleFromH1: info.fromH1 }
       : s.activeDocument,
     documents: s.documents.map((doc) =>
-      doc.path === active.path ? { ...doc, displayTitle: title } : doc,
+      doc.path === active.path
+        ? { ...doc, displayTitle: info.title, titleFromH1: info.fromH1 }
+        : doc,
     ),
   }))
 }

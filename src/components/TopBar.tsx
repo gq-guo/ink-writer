@@ -112,7 +112,11 @@ export function TopBar() {
             }}
           />
         ) : fileName ? (
-          <button className="ink-topbar-name" title={t('topbar.rename')} onClick={startEditing}>
+          <button
+            className="ink-topbar-name"
+            title={`${activeDocument?.path ?? ''} — ${t('topbar.rename')}`}
+            onClick={startEditing}
+          >
             {fileName}
           </button>
         ) : null}

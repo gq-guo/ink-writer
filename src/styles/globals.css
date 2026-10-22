@@ -1352,6 +1352,11 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   gap: 6px;
 }
 
+/* 首行是 H1 时头部只留元信息行 */
+.ink-doc-header[data-compact='true'] .ink-doc-meta {
+  margin-top: 8px;
+}
+
 .ink-dot {
   opacity: 0.6;
 }

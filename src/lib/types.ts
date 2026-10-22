@@ -27,6 +27,8 @@ export interface Document extends DocumentMeta {
   originalEncoding: 'utf-8' | 'gbk' | 'unknown'
   /** 首个 H1 ?? 文件名去扩展名 ?? "Untitled" */
   displayTitle: string
+  /** displayTitle 是否来自正文首个 H1（是 → 正文上方不再重复大标题） */
+  titleFromH1: boolean
   /** 打开序号：只有 openDocument 递增，rename 等元数据变更不影响编辑器重建 */
   openSeq: number
 }
