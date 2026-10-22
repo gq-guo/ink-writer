@@ -123,11 +123,6 @@ export function EditorHost() {
     viewRef.current = view
     syncDarkFlag(view)
 
-    // dev：把主视图挂到 globalThis，供自检脚本使用
-    if (import.meta.env.DEV) {
-      globalThis.__inkMainView = view
-    }
-
     // 开发期自检：在真实应用里验证光标居中
     // 触发方式：dev 模式下打开 http://localhost:1420/?selftest=1
     // 结果写入 /tmp/ink-selftest.txt

@@ -11,12 +11,11 @@ import { EditorView } from '@codemirror/view'
 
 import { focusModeField, setFocusModeEffect } from './focusMode'
 import { typewriterModeField } from './typewriter'
+import { pauseAutosave, resumeAutosave } from '@/stores/documentStore'
 
 const RESULT_PATH = '/tmp/ink-selftest.txt'
 
-declare global {
-  var __inkMainView: EditorView | undefined
-}
+
 
 function nextFrames(count: number): Promise<void> {
   return new Promise((resolve) => {
@@ -80,6 +79,8 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
     console.info('[selftest]', line)
   }
 
+  // 全程暂停自动保存（双保险：即使探针意外触发变更也不会写盘）
+  pauseAutosave()
   try {
     view.focus()
     await nextFrames(2)
@@ -120,56 +121,51 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
     const moved = Math.abs(view.scrollDOM.scrollTop - before)
     push(`move-only: scrollTopDelta=${moved.toFixed(0)} (应接近 0，说明没有把视图拽回中心)`)
 
-    // ── 在「App 真实编辑器」上检测点击定位 ──
-    const mainView = globalThis.__inkMainView
-    if (mainView) {
-      const original = mainView.state.doc.toString()
-      const probe = Array.from(
-        { length: 40 },
-        (_, i) => `第 ${i + 1} 段：用于检测点击定位的文本。`,
-      ).join('\n\n')
-      mainView.dispatch({
-        changes: { from: 0, to: mainView.state.doc.length, insert: probe },
-      })
-      await nextFrames(3)
+    // ── 点击定位检测：必须用独立离屏视图，绝不能碰用户文档 ──
+    // （历史事故：探针替换主文档内容触发了自动保存，把探针文本写进用户文件）
+    const probeHost = document.createElement('div')
+    probeHost.style.cssText =
+      'position:fixed;left:0;top:0;width:640px;height:400px;opacity:0.02;outline:none'
+    document.body.appendChild(probeHost)
+    const probeView = new EditorView({
+      parent: probeHost,
+      state: EditorState.create({
+        doc,
+        extensions: createInkExtensions({
+          dark: false,
+          onDocChanged: () => {},
+          onStatistics: () => {},
+          getDocDir: () => '',
+          onOpenUrl: () => {},
+          onRevealPath: () => {},
+          onError: () => {},
+        }),
+      }),
+    })
+    probeView.focus()
+    await nextFrames(2)
 
-      const mRect = mainView.scrollDOM.getBoundingClientRect()
-      const cRect = mainView.contentDOM.getBoundingClientRect()
-      const cStyle = getComputedStyle(mainView.contentDOM)
-      const cached = (mainView as unknown as { viewState: { paddingTop: number } }).viewState
-      push(
-        `padding: computed=${cStyle.paddingTop} cached=${cached.paddingTop} | ` +
-          `contentTop=${cRect.top.toFixed(1)} scrollerTop=${mRect.top.toFixed(1)} ` +
-          `contentH=${cRect.height.toFixed(1)} scrollerH=${mRect.height.toFixed(1)}`,
-      )
-      const mLines = Array.from(mainView.contentDOM.querySelectorAll('.cm-line')).filter((el) => {
+    {
+      const mRect = probeView.scrollDOM.getBoundingClientRect()
+      const mLines = Array.from(probeView.contentDOM.querySelectorAll('.cm-line')).filter((el) => {
         const r = el.getBoundingClientRect()
         return r.top >= mRect.top - 1 && r.bottom <= mRect.bottom + 1
       })
-      push(`main-editor: visible=${mLines.length} scrollerTop=${mRect.top.toFixed(1)} h=${mRect.height.toFixed(1)}`)
-      const paraEls = Array.from(mainView.contentDOM.querySelectorAll('.cm-md-para'))
-      const paraPad = paraEls[0] ? getComputedStyle(paraEls[0]).paddingBottom : 'n/a'
-      push(`para-deco: count=${paraEls.length} paddingBottom=${paraPad}`)
-      const domLines = Array.from(mainView.contentDOM.querySelectorAll('.cm-line'))
+      push(
+        `probe-editor: visible=${mLines.length} scrollerTop=${mRect.top.toFixed(1)} h=${mRect.height.toFixed(1)}`,
+      )
+      const domLines = Array.from(probeView.contentDOM.querySelectorAll('.cm-line'))
       for (const el of mLines.slice(0, 5)) {
         const r = el.getBoundingClientRect()
         const y = r.top + r.height / 2
-        const pos = mainView.posAtCoords({ x: r.left + 12, y })
-        const landed = pos === null ? 'null' : String(mainView.state.doc.lineAt(pos).number)
+        const pos = probeView.posAtCoords({ x: r.left + 12, y })
+        const landed = pos === null ? 'null' : String(probeView.state.doc.lineAt(pos).number)
         const domIndex = domLines.indexOf(el)
-        const text = (el.textContent ?? '').slice(0, 10)
-        const textLine = /第\s*(\d+)\s*段/.exec(text)?.[1] ?? '?'
-        push(
-          `main-click: domIdx=${domIndex} textLine=${textLine} y=${y.toFixed(0)} -> line ${landed}`,
-        )
+        push(`probe-click: domIdx=${domIndex} y=${y.toFixed(0)} -> line ${landed}`)
       }
-
-      // 还原用户文档
-      mainView.dispatch({
-        changes: { from: 0, to: mainView.state.doc.length, insert: original },
-      })
-      await nextFrames(2)
     }
+    probeView.destroy()
+    probeHost.remove()
 
     // ── 点击定位检测：posAtCoords 是否把点击映射到正确的行 ──
     const viewRect = view.scrollDOM.getBoundingClientRect()
@@ -195,6 +191,8 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
     push('DONE')
   } catch (error) {
     push(`ERROR: ${String(error)}`)
+  } finally {
+    resumeAutosave()
   }
 
   try {

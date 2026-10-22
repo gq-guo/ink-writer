@@ -52,7 +52,12 @@ fn create_document(dir: String, base_name: String) -> Result<DocumentMeta, Comma
 
 #[tauri::command]
 fn rename_document(path: String, new_name: String) -> Result<String, CommandError> {
-    fs_ops::rename_document(&to_path(&path), &new_name)
+    let source = to_path(&path);
+    let new_path = fs_ops::rename_document(&source, &new_name)?;
+    // 自身 rename 产生的 watch 事件不应触发前端刷新/静默重载
+    watcher::record_self_write(&source);
+    watcher::record_self_write(Path::new(&new_path));
+    Ok(new_path)
 }
 
 #[tauri::command]

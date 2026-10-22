@@ -67,6 +67,16 @@ interface DocumentState {
 let pendingText: string | null = null
 /** 文档打开序号：驱动编辑器重建的唯一信号（rename 只改元数据，不应重建） */
 let openSeqCounter = 0
+/** 自动保存暂停计数器（>0 时忽略一切变更；selftest 等临时操作使用） */
+let autosavePauseCount = 0
+
+/** 暂停/恢复自动保存；必须成对调用（try/finally） */
+export function pauseAutosave(): void {
+  autosavePauseCount += 1
+}
+export function resumeAutosave(): void {
+  autosavePauseCount = Math.max(0, autosavePauseCount - 1)
+}
 /** 最近一次成功写入的内容 */
 let lastWrittenText = ''
 /** 写入队列，保证同一时间只有一个写入任务 */
@@ -222,6 +232,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
    * 编辑器内容变化：防抖入口（spec §5.3）
    */
   onEditorChange: (text: string) => {
+    if (autosavePauseCount > 0) return
     pendingText = text
     set({ saveState: 'dirty' })
     clearSaveTimer()
@@ -376,9 +387,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       }
 
       // 无 pending 输入 → 静默刷新，保持光标与滚动位置
+      // no-op 守卫：内容没变化只更新元数据，避免无谓的 setState（滚动/光标跳动）
       pendingText = null
       lastWrittenText = disk.content
-      editorBridge.setContent(disk.content, { preserveSelection: true })
+      if (editorBridge.getContent() !== disk.content) {
+        editorBridge.setContent(disk.content, { preserveSelection: true })
+      }
       set((state) => ({
         activeDocument: state.activeDocument
           ? {
