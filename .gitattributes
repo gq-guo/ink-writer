@@ -1,0 +1,5 @@
+# 测试夹具保持原始字节：
+# crlf.md 必须保留 CRLF（测行尾探测），gbk.md 必须保留 GBK 编码
+fixtures/crlf.md -text
+fixtures/gbk.md -text
+fixtures/fake-md.md -text
