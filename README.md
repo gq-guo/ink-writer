@@ -228,10 +228,21 @@ CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 
 
 ---
 
-## 六、尚未完成 / 已知限制
+## 六、发布与更新（参考 firebee）
 
-- **签名与公证**（spec §20）：`pnpm tauri build` 可产出未签名 `.app`；Developer ID 签名 +
-  `xcrun notarytool submit --wait` + `stapler staple` 需要真实证书，未在仓库内实现 CI。
+不做 Apple 签名/公证，走 GitHub Release 分发（firebee 同款策略）：
+
+- **安装**：`curl -fsSL https://raw.githubusercontent.com/gq-guo/ink-writer/main/scripts/install.sh | sh`
+  — curl 下载的文件不带 quarantine 属性，未公证的包也不会被 Gatekeeper 拦
+- **打包**：打 `v*` tag 触发 `.github/workflows/release.yml`：质量门禁 →
+  universal 构建（`createUpdaterArtifacts` 产更新包）→ dmg/app.zip/tar.gz+sig/latest.json →
+  **draft release 传完再发布**（避免 latest.json 指向空 release）
+- **自更新**：`tauri-plugin-updater`，启动 3s 静默检查
+  `releases/latest/download/latest.json`，发现新版本弹窗 → 下载安装 → 重启。
+  minisign 密钥对：公钥嵌在 tauri.conf.json，私钥在 GitHub secret
+  `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)`（本地备份 `~/.tauri/ink-writer.key`）
+- **浏览器下载 dmg** 会带 quarantine：拖进 Applications 后执行一次
+  `xattr -dr com.apple.quarantine /Applications/Ink.app` 即可
 - **性能预算**（spec §18.1）：已实现大文件降级阈值（统计分片、>5MB 收窄 Focus 范围、
   >2MB 跳过正文搜索），但 10MB 文档的端到端手测仍需人工完成。
 - **行内标记折叠**（行内链接 / 图片语法在光标离开行后隐藏）：spec R1 明确列入 v1.1 Backlog。

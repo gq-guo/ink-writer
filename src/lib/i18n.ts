@@ -143,6 +143,9 @@ const zh: Record<string, string> = {
   'toast.exportedHtml': '已导出 HTML',
   'toast.createDirFailed': '无法创建目录',
   'toast.imageNoDoc': '请先打开一个文档再插入图片',
+  'update.title': '发现新版本 {version}',
+  'update.later': '稍后',
+  'update.install': '立即安装并重启',
   'save.saving': '保存中…',
   'save.saved': '已保存',
 
@@ -275,6 +278,9 @@ const en: Record<string, string> = {
   'toast.exportedHtml': 'HTML exported',
   'toast.createDirFailed': 'Cannot create directory',
   'toast.imageNoDoc': 'Open a document before inserting images',
+  'update.title': 'New version {version} is available',
+  'update.later': 'Later',
+  'update.install': 'Install & Restart',
   'save.saving': 'Saving…',
   'save.saved': 'Saved',
 

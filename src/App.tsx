@@ -18,6 +18,8 @@ import { Sidebar } from '@/components/Sidebar'
 import { StatusBar } from '@/components/StatusBar'
 import { Toast } from '@/components/Toast'
 import { TopBar } from '@/components/TopBar'
+import { UpdateDialog } from '@/components/UpdateDialog'
+import { scheduleUpdateCheck } from '@/lib/updater'
 import { WindowDragRegion } from '@/components/WindowDragRegion'
 import { readPersisted, writePersisted } from '@/lib/persist'
 import { useDocumentStore, type FsEventPayload } from '@/stores/documentStore'
@@ -45,6 +47,11 @@ export default function App() {
       })
       useUiStore.getState().hydrate(ui)
     })()
+  }, [])
+
+  // ── 启动后检查更新（静默）──
+  useEffect(() => {
+    scheduleUpdateCheck()
   }, [])
 
   // ── 启动：扫描库目录 + 监听 ──
@@ -151,6 +158,7 @@ export default function App() {
       {quickOpenVisible ? <QuickOpen /> : null}
       {paletteVisible ? <CommandPalette /> : null}
       <ConflictDialog />
+      <UpdateDialog />
       <Toast />
       <GlobalShortcuts />
     </div>

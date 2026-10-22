@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Version files agree
+        run: sh scripts/check-version.sh
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: ESLint
+        run: pnpm lint
+      - name: Vitest
+        run: pnpm test
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Format
+        run: cargo fmt --all -- --check
+        working-directory: src-tauri
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: src-tauri
+      - name: Cargo test
+        run: cargo test --locked
+        working-directory: src-tauri

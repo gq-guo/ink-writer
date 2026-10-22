@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# 同一个 tag 被重推时不并行跑两份，避免互相覆盖已发布的产物
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # tag 推送不触发 CI（ci.yml 只在 push main / PR 上跑），质量门禁在这里再跑一遍
+  gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches version files
+        run: sh scripts/check-version.sh "${GITHUB_REF_NAME}"
+      - name: Updater public key is set
+        run: |
+          if grep -q dW50cnJ1c3RlZCBjb21tZW50 src-tauri/tauri.conf.json && ! grep -q '"updater"' src-tauri/tauri.conf.json; then
+            echo "::error::plugins.updater missing in tauri.conf.json"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo fmt --all -- --check
+        working-directory: src-tauri
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test --locked
+        working-directory: src-tauri
+
+  build-macos:
+    needs: gate
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # createUpdaterArtifacts：额外产出 Ink.app.tar.gz + .sig（updater 私钥签名）。
+      # 只在这里打开，本地 pnpm tauri build 不需要私钥。
+      - name: Build universal .app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >
+          pnpm tauri build --target universal-apple-darwin
+          --config '{"bundle":{"createUpdaterArtifacts":true}}'
+      - name: Package .dmg, .app.zip and updater files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          out=dist && mkdir -p "$out"
+          app=src-tauri/target/universal-apple-darwin/release/bundle/macos/Ink.app
+          scripts/make-dmg.sh "$app" "$out/Ink-${GITHUB_REF_NAME}-macos-universal.dmg"
+          ditto -c -k --keepParent "$app" "$out/Ink-${GITHUB_REF_NAME}-macos-universal.app.zip"
+          # 应用内更新：签名过的 tar.gz + latest.json（app 从 releases/latest/download/latest.json 检查新版本）
+          tarball="Ink-${GITHUB_REF_NAME}-macos-universal.app.tar.gz"
+          cp "$app.tar.gz" "$out/$tarball"
+          notes="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="${GITHUB_REF_NAME}" --jq .body || true)"
+          jq -n \
+            --arg version "${GITHUB_REF_NAME#v}" \
+            --arg notes "$notes" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sig "$(cat "$app.tar.gz.sig")" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$tarball" \
+            '{version: $version, notes: $notes, pub_date: $date, platforms: {
+               "darwin-aarch64": {signature: $sig, url: $url},
+               "darwin-x86_64": {signature: $sig, url: $url}}}' > "$out/latest.json"
+          (cd "$out" && shasum -a 256 * > SHA256SUMS.txt)
+          ls -la "$out"
+      # 先建草稿、传完全部产物再公开：否则 releases/latest 会先指向还没有文件的版本，
+      # install.sh 和 app 内更新在这段时间里会 404
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ink ${{ github.ref_name }}
+          draft: true
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Install (macOS, Intel & Apple Silicon)
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/gq-guo/ink-writer/main/scripts/install.sh | sh
+            ```
+
+            The script downloads this release, verifies `SHA256SUMS.txt` and installs to `/Applications`. The build is not notarized; files downloaded with curl carry no quarantine flag, so it opens without a Gatekeeper prompt. If you download the `.dmg` in a browser instead, run `xattr -dr com.apple.quarantine /Applications/Ink.app` once after dragging it to Applications.
+
+            文档库位于 `~/Documents/Ink/`。校验和在 `SHA256SUMS.txt`。
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false
