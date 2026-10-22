@@ -1,6 +1,66 @@
 @import 'tailwindcss';
 
 /* ==========================================================================
+   内置字体（SIL OFL 许可，可随包分发）
+   - iA Writer Quattro：拉丁 + 常用符号（CJK 仍回落系统字体，这是设计预期 ——
+     中西文混排时拉丁用 Quattro、中文用苹方）
+   - JetBrains Mono：代码字体
+   之前的问题：栈里引用了字体名但系统未安装，拉丁/中文/代码分别回退到
+   三种不同字体，看起来像「同时激活了三个字体」。
+   ========================================================================== */
+
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../fonts/quattro-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../fonts/quattro-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../fonts/quattro-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'iA Writer Quattro';
+  src: url('../fonts/quattro-BoldItalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../fonts/jetbrains-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../fonts/jetbrains-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../fonts/jetbrains-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+
+/* ==========================================================================
    Ink 设计令牌（spec §17.1）
    颜色一律来自 CSS variables，组件内禁止出现色值字面量。
    ========================================================================== */
