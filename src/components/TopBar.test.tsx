@@ -71,6 +71,15 @@ describe('TopBar 文件名内联重命名', () => {
     )
   })
 
+  it('排版面板 Esc 关闭', async () => {
+    const user = userEvent.setup()
+    render(<TopBar />)
+    await user.click(screen.getByTitle('排版'))
+    expect(screen.getByText('写作字体')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByText('写作字体')).not.toBeInTheDocument()
+  })
+
   it('Aa 按钮第二次点击收起排版面板', async () => {
     const user = userEvent.setup()
     render(<TopBar />)

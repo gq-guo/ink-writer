@@ -4,6 +4,7 @@
  * 写作字体 / 字号 / 行高 —— 效果图里的 "Aa" 入口。
  * 改动即时生效（只改 CSS variables，不重建 EditorView）。
  */
+import { useEffect } from 'react'
 import { useSettingsStore, FONT_STACKS } from '@/stores/settingsStore'
 import { useT } from '@/lib/i18n'
 import type { AppSettings } from '@/lib/types'
@@ -18,6 +19,18 @@ const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string | null> = {
 
 export function TypographyPopover({ onClose }: { onClose: () => void }) {
   const t = useT()
+
+  // Esc 关闭（替代已删除的 Done 按钮；选项即时生效，无需「确认」）
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [onClose])
   const settings = useSettingsStore((state) => state.settings)
   const update = useSettingsStore((state) => state.update)
 
@@ -81,9 +94,6 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <button className="ink-popover-close" onClick={onClose}>
-        {t('type.done')}
-      </button>
     </div>
   )
 }
