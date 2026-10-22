@@ -6,13 +6,13 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import { useDocumentStore } from '@/stores/documentStore'
+import { useUiStore } from '@/stores/uiStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { buildCommands } from '@/commands/registry'
 import { useT } from '@/lib/i18n'
 
 export function MoreMenu({ onClose }: { onClose: () => void }) {
   const activeDocument = useDocumentStore((state) => state.activeDocument)
-  const renameDocument = useDocumentStore((state) => state.renameDocument)
   const deleteDocument = useDocumentStore((state) => state.deleteDocument)
   const favorites = useSettingsStore((state) => state.settings.favorites)
   const updateSettings = useSettingsStore((state) => state.update)
@@ -66,8 +66,8 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
       <button
         className="ink-menu-item"
         onClick={() => {
-          const name = window.prompt(t('menu.rename'), activeDocument.fileName.replace(/\.md$/i, ''))
-          if (name) void renameDocument(activeDocument.path, name)
+          // window.prompt 在 WKWebView 不可用 → 顶栏内联编辑
+          useUiStore.getState().requestRename()
           onClose()
         }}
       >

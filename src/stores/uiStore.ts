@@ -18,6 +18,8 @@ interface UiState {
   recentCommands: string[]
   toasts: Toast[]
   statusExpanded: boolean
+  /** 顶栏文件名进入内联编辑的信号（命令/菜单触发） */
+  renameSignal: number
 
   toggleSidebar: () => void
   setSidebarVisible: (visible: boolean) => void
@@ -31,6 +33,8 @@ interface UiState {
   pushToast: (toast: Omit<Toast, 'id'>) => void
   dismissToast: (id: number) => void
   setStatusExpanded: (expanded: boolean) => void
+  /** 请求顶栏进入文件名编辑态（window.prompt 在 WKWebView 不可用） */
+  requestRename: () => void
   pushRecentCommand: (id: string) => void
   hydrate: (snapshot: Partial<UiSnapshot>) => void
   snapshot: () => UiSnapshot
@@ -55,6 +59,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   recentCommands: [],
   toasts: [],
   statusExpanded: false,
+  renameSignal: 0,
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
@@ -79,6 +84,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
   setStatusExpanded: (expanded) => set({ statusExpanded: expanded }),
+
+  requestRename: () => set((state) => ({ renameSignal: state.renameSignal + 1 })),
 
   pushRecentCommand: (id) =>
     set((s) => ({

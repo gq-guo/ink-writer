@@ -184,12 +184,10 @@ export function buildCommands(): Command[] {
       group: 'doc',
       id: 'doc.rename',
       title: t('cmd.doc.rename'),
-      run: async () => {
-        const active = useDocumentStore.getState().activeDocument
-        if (!active) return
-        const name = window.prompt('重命名文档', active.fileName.replace(/\.md$/i, ''))
-        if (!name) return
-        await useDocumentStore.getState().renameDocument(active.path, name)
+      run: () => {
+        if (!useDocumentStore.getState().activeDocument) return
+        // window.prompt 在 WKWebView 不可用 → 顶栏内联编辑
+        useUiStore.getState().requestRename()
       },
       when: () => useDocumentStore.getState().activeDocument !== null,
     },
