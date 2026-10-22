@@ -52,13 +52,20 @@ export default function App() {
     if (!hydrated || !libraryPath || bootstrappedRef.current) return
     bootstrappedRef.current = true
     void (async () => {
-      const store = useDocumentStore.getState()
-      await store.bootstrapLibrary(libraryPath)
-      const state = useDocumentStore.getState()
-      if (state.documents.length === 0) {
-        await state.createDocument()
-      } else {
-        await state.openDocument(state.documents[0]!.path)
+      try {
+        const store = useDocumentStore.getState()
+        await store.bootstrapLibrary(libraryPath)
+        const state = useDocumentStore.getState()
+        if (state.documents.length === 0) {
+          await state.createDocument()
+        } else {
+          await state.openDocument(state.documents[0]!.path)
+        }
+      } catch (error) {
+        // 启动链不再无声失败（此前 HMR 重载异常会让 documents 永远为空）
+        useUiStore
+          .getState()
+          .pushToast({ message: `启动失败：${String(error)}`, kind: 'error' })
       }
     })()
   }, [hydrated, libraryPath])

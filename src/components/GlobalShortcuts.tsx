@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 
 import { buildCommands } from '@/commands/registry'
+import { shortcutOf } from '@/lib/keys'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUiStore } from '@/stores/uiStore'
 
@@ -28,20 +29,6 @@ const SHORTCUT_COMMANDS: Record<string, string> = {
   'mod+shift+e': 'export.html',
 }
 
-export function shortcutOf(event: KeyboardEvent): string {
-  const parts: string[] = []
-  if (event.metaKey || event.ctrlKey) parts.push('mod')
-  if (event.shiftKey) parts.push('shift')
-  if (event.altKey) parts.push('alt')
-
-  let key = event.key
-  if (key === ' ') key = 'space'
-  else if (key === '+') key = '='
-  else key = key.toLowerCase()
-
-  parts.push(key)
-  return parts.join('+')
-}
 
 export function GlobalShortcuts() {
   useEffect(() => {
