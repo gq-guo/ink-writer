@@ -212,6 +212,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       pendingText = null
       lastWrittenText = result.content
       set({ activeDocument: document, saveState: 'idle' })
+      useEditorStore.getState().setHasContent(result.content.trim().length > 0)
       clearRetryTimer()
 
       if (result.encoding === 'gbk') {
@@ -234,6 +235,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
    */
   onEditorChange: (text: string) => {
     if (autosavePauseCount > 0) return
+    useEditorStore.getState().setHasContent(text.trim().length > 0)
     pendingText = text
     set({ saveState: 'dirty' })
     clearSaveTimer()

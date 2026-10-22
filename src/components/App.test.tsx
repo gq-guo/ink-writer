@@ -12,6 +12,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({ load: vi.fn().mockResolvedValue(nul
 
 import App from '@/App'
 import { useDocumentStore } from '@/stores/documentStore'
+import { useEditorStore } from '@/stores/editorStore'
 import { syncLocale } from '@/lib/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -170,6 +171,37 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf8')
     expect(css).toContain('--titlebar-height: 32px')
     expect(css).toMatch(/\.ink-shell\s*\{[^}]*padding-top:\s*var\(--titlebar-height\)/)
+  })
+
+  it('空文档显示 Start writing 引导，输入后消失', async () => {
+    useEditorStore.getState().setHasContent(false)
+    window.localStorage.setItem(
+      'ink:settings',
+      JSON.stringify({ libraryPath: '/tmp/ink-empty-test', locale: 'zh-CN' }),
+    )
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'path_exists':
+          return true
+        case 'list_documents':
+          return []
+        case 'read_document':
+          return { content: '', encoding: 'utf-8', mtime: 1000, size: 0, lineEnding: 'lf' }
+        default:
+          return undefined
+      }
+    })
+
+    const { container } = render(<App />)
+    await waitFor(() => {
+      expect(screen.getByText('Start writing.')).toBeInTheDocument()
+    })
+
+    // 模拟输入：经 documentStore.onEditorChange（编辑器每次击键都走这里）
+    await act(async () => {
+      useDocumentStore.getState().onEditorChange('你好')
+    })
+    expect(container.querySelector('.ink-empty-guide')).toBeNull()
   })
 
   it('已有库目录时直接进入编辑器并打开最近文档', async () => {

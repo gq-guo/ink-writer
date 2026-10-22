@@ -9,22 +9,28 @@ interface EditorState {
   focusMode: boolean
   statistics: DocumentStatistics
   conflict: ExternalConflict | null
+  /** 当前文档是否有内容（驱动「Start writing.」引导的显隐；正文权威在 CM6，
+   *  activeDocument.content 只是打开时的快照，不能用它判断） */
+  hasContent: boolean
 
   toggleFocusMode: () => void
   setFocusMode: (on: boolean) => void
   setStatistics: (statistics: DocumentStatistics) => void
   setConflict: (conflict: ExternalConflict) => void
   clearConflict: () => void
+  setHasContent: (hasContent: boolean) => void
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
   focusMode: false,
   statistics: EMPTY_STATISTICS,
   conflict: null,
+  hasContent: false,
 
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
   setFocusMode: (on) => set({ focusMode: on }),
   setStatistics: (statistics) => set({ statistics }),
   setConflict: (conflict) => set({ conflict }),
   clearConflict: () => set({ conflict: null }),
+  setHasContent: (hasContent) => set({ hasContent }),
 }))

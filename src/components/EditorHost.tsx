@@ -260,11 +260,11 @@ export function EditorHost() {
     if (effects.length > 0) view.dispatch({ effects })
   }, [focusMode, typewriterMode, performanceMode])
 
-  const isEmpty = (activeDocument?.content ?? '').trim().length === 0
+  const hasContent = useEditorStore((state) => state.hasContent)
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden">
-      {isEmpty ? (
+      {!hasContent ? (
         <div className="ink-empty-guide">
           <div className="ink-empty-title">{t('empty.start')}</div>
           <div className="ink-empty-sub">{t('empty.firstThought')}</div>
