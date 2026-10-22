@@ -269,7 +269,9 @@ pub fn write_document(
     if let Some(expected) = expected_mtime {
         if let Ok((current, _)) = stat_info(path) {
             if current != expected {
-                return Err(CommandError::MtimeConflict { disk_mtime: current });
+                return Err(CommandError::MtimeConflict {
+                    disk_mtime: current,
+                });
             }
         }
     }
@@ -309,7 +311,9 @@ pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, Comm
         name = format!("{} {}.{}", base, counter, MARKDOWN_EXT);
         counter += 1;
         if counter > 9999 {
-            return Err(CommandError::Message("目录中文件过多，无法创建新文档".into()));
+            return Err(CommandError::Message(
+                "目录中文件过多，无法创建新文档".into(),
+            ));
         }
     }
 
@@ -332,7 +336,10 @@ pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandErr
         .map(|(a, b)| a == b)
         .unwrap_or(false);
     if !same_file && target.exists() {
-        return Err(CommandError::Message(format!("已存在同名文件：{}", new_name)));
+        return Err(CommandError::Message(format!(
+            "已存在同名文件：{}",
+            new_name
+        )));
     }
     fs::rename(path, &target).map_err(|e| io_message(path, &e))?;
     Ok(target.to_string_lossy().to_string())
@@ -390,7 +397,11 @@ pub fn copy_image(doc_dir: &Path, source: &Path) -> Result<String, CommandError>
 }
 
 /// 写入图片字节（拖拽 / 粘贴），重名追加 -2/-3，返回相对路径
-pub fn copy_image_bytes(doc_dir: &Path, file_name: &str, bytes: &[u8]) -> Result<String, CommandError> {
+pub fn copy_image_bytes(
+    doc_dir: &Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<String, CommandError> {
     let assets = doc_dir.join("assets");
     fs::create_dir_all(&assets).map_err(|e| io_message(&assets, &e))?;
 
@@ -402,7 +413,11 @@ pub fn copy_image_bytes(doc_dir: &Path, file_name: &str, bytes: &[u8]) -> Result
         .chars()
         .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
         .collect();
-    let safe = if safe.is_empty() { "image.png".to_string() } else { safe };
+    let safe = if safe.is_empty() {
+        "image.png".to_string()
+    } else {
+        safe
+    };
 
     let name = unique_asset_name(&assets, &safe);
     fs::write(assets.join(&name), bytes).map_err(|e| io_message(&assets, &e))?;

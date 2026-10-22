@@ -168,6 +168,9 @@ mod tests {
     fn line_ending_roundtrip() {
         assert_eq!(detect_line_ending("a\r\nb"), "crlf");
         assert_eq!(detect_line_ending("a\nb"), "lf");
-        assert_eq!(apply_line_ending(&normalize_to_lf("a\r\nb"), "crlf"), "a\r\nb");
+        assert_eq!(
+            apply_line_ending(&normalize_to_lf("a\r\nb"), "crlf"),
+            "a\r\nb"
+        );
     }
 }

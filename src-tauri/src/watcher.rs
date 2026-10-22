@@ -52,8 +52,9 @@ pub struct WatcherState {
 
 pub fn create_watcher(app: &AppHandle) -> Result<(), String> {
     let handle = app.clone();
-    let debouncer = new_debouncer(Duration::from_millis(500), move |result: DebounceEventResult| {
-        match result {
+    let debouncer = new_debouncer(
+        Duration::from_millis(500),
+        move |result: DebounceEventResult| match result {
             Ok(events) => {
                 for event in events {
                     let path = event.path;
@@ -71,8 +72,8 @@ pub fn create_watcher(app: &AppHandle) -> Result<(), String> {
             Err(err) => {
                 let _ = handle.emit(FS_ERROR_EVENT, err.to_string());
             }
-        }
-    })
+        },
+    )
     .map_err(|e| e.to_string())?;
 
     app.manage(WatcherState {
@@ -87,7 +88,12 @@ pub fn watch_library(app: &AppHandle, path: &Path) -> Result<(), CommandError> {
     let state = app.state::<WatcherState>();
     let mut debouncer = state.debouncer.lock().unwrap_or_else(|e| e.into_inner());
 
-    if let Some(current) = state.current.lock().unwrap_or_else(|e| e.into_inner()).take() {
+    if let Some(current) = state
+        .current
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
         if current != path {
             let _ = debouncer.watcher().unwatch(&current);
         }

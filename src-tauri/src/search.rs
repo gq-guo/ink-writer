@@ -46,7 +46,11 @@ fn find_ci(haystack: &[char], needle: &[char]) -> Option<usize> {
         return None;
     }
     for i in 0..=(haystack.len() - needle.len()) {
-        if haystack[i..i + needle.len()].iter().zip(needle.iter()).all(|(a, b)| ci_eq(*a, *b)) {
+        if haystack[i..i + needle.len()]
+            .iter()
+            .zip(needle.iter())
+            .all(|(a, b)| ci_eq(*a, *b))
+        {
             return Some(i);
         }
     }

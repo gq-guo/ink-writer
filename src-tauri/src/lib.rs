@@ -108,9 +108,8 @@ fn path_exists(path: String) -> bool {
 /// 创建目录（含父目录）
 #[tauri::command]
 fn ensure_directory(path: String) -> Result<(), CommandError> {
-    std::fs::create_dir_all(&path).map_err(|e| {
-        CommandError::Message(format!("无法创建目录 {}：{}", path, e))
-    })
+    std::fs::create_dir_all(&path)
+        .map_err(|e| CommandError::Message(format!("无法创建目录 {}：{}", path, e)))
 }
 
 #[tauri::command]
@@ -144,7 +143,10 @@ fn reveal_in_finder(path: String) -> Result<(), CommandError> {
 
     match status {
         Ok(s) if s.success() => Ok(()),
-        Ok(s) => Err(CommandError::Message(format!("无法在访达中显示（退出码 {}）", s))),
+        Ok(s) => Err(CommandError::Message(format!(
+            "无法在访达中显示（退出码 {}）",
+            s
+        ))),
         Err(e) => Err(CommandError::Message(format!("无法在访达中显示：{}", e))),
     }
 }
@@ -157,7 +159,9 @@ fn open_url(url: String) -> Result<(), CommandError> {
         || lowered.starts_with("https://")
         || lowered.starts_with("mailto:"))
     {
-        return Err(CommandError::Message("仅支持打开 http/https/mailto 链接".into()));
+        return Err(CommandError::Message(
+            "仅支持打开 http/https/mailto 链接".into(),
+        ));
     }
     let status = Command::new("open")
         .arg(&url)
@@ -166,7 +170,10 @@ fn open_url(url: String) -> Result<(), CommandError> {
         .status();
     match status {
         Ok(s) if s.success() => Ok(()),
-        Ok(s) => Err(CommandError::Message(format!("无法打开链接（退出码 {}）", s))),
+        Ok(s) => Err(CommandError::Message(format!(
+            "无法打开链接（退出码 {}）",
+            s
+        ))),
         Err(e) => Err(CommandError::Message(format!("无法打开链接：{}", e))),
     }
 }
@@ -245,7 +252,8 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             let handle = app.handle().clone();
-            watcher::create_watcher(&handle).map_err(std::io::Error::other)?;            Ok(())
+            watcher::create_watcher(&handle).map_err(std::io::Error::other)?;
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_documents,

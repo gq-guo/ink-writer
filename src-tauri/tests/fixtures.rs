@@ -59,7 +59,13 @@ fn gbk_fixture_is_converted_to_utf8_on_write() {
     ink_writer_lib::testing::write_document(&target, &source.content, None).unwrap();
 
     let written = std::fs::read(&target).unwrap();
-    assert!(std::str::from_utf8(&written).is_ok(), "写出的文件必须是 UTF-8");
-    assert!(!written.starts_with(&[0xEF, 0xBB, 0xBF]), "写出的文件不能有 BOM");
+    assert!(
+        std::str::from_utf8(&written).is_ok(),
+        "写出的文件必须是 UTF-8"
+    );
+    assert!(
+        !written.starts_with(&[0xEF, 0xBB, 0xBF]),
+        "写出的文件不能有 BOM"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
