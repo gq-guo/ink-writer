@@ -294,3 +294,60 @@ describe('documentStore 自动保存状态机（spec §12.1 / §19.2）', () => 
     expect(editorStore.getState().conflict).toBeNull()
   })
 })
+
+describe('标题重算（spec §7.3：编辑 H1 后 1s 内更新）', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('自动保存已落盘后，标题仍按最新 H1 刷新', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: '# Old\n', encoding: 'utf-8', mtime: 1000, size: 6, lineEnding: 'lf' }
+        case 'write_document':
+          return { mtime: 1001 }
+        case 'list_documents':
+          return []
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
+    documentStore.getState().onEditorChange('# New Title\n')
+    // 500ms 自动保存先落盘（pendingText 被清空），1s 后才重算标题
+    await vi.advanceTimersByTimeAsync(1200)
+
+    expect(documentStore.getState().activeDocument!.displayTitle).toBe('New Title')
+  })
+
+  it('重命名按最新正文计算标题，而不是打开时的文本', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'no heading', encoding: 'utf-8', mtime: 1000, size: 10, lineEnding: 'lf' }
+        case 'write_document':
+          return { mtime: 1001 }
+        case 'rename_document':
+          return '/library/Renamed.md'
+        case 'list_documents':
+          return []
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
+    documentStore.getState().onEditorChange('# Fresh\n')
+    await vi.advanceTimersByTimeAsync(600)
+    await documentStore.getState().renameDocument('/library/Note.md', 'Renamed.md')
+
+    const active = documentStore.getState().activeDocument!
+    expect(active.displayTitle).toBe('Fresh')
+    expect(active.titleFromH1).toBe(true)
+  })
+})

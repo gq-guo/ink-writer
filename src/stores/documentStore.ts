@@ -81,6 +81,12 @@ export function resumeAutosave(): void {
 }
 /** 最近一次成功写入的内容 */
 let lastWrittenText = ''
+/**
+ * 活动文档的最新全文（含未落盘部分）。
+ * pendingText 在写入时会被置空、activeDocument.content 只是打开时的文本，
+ * 标题重算 / 重命名都必须读这里，否则改了 H1 列表也不会更新。
+ */
+let latestText = ''
 /** 写入队列，保证同一时间只有一个写入任务 */
 let writeChain: Promise<void> = Promise.resolve()
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -251,6 +257,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       }
       pendingText = null
       lastWrittenText = result.content
+      latestText = result.content
       set({ activeDocument: document, saveState: 'idle' })
       useEditorStore.getState().setHasContent(result.content.trim().length > 0)
       clearRetryTimer()
@@ -277,6 +284,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     if (autosavePauseCount > 0) return
     useEditorStore.getState().setHasContent(text.trim().length > 0)
     pendingText = text
+    latestText = text
     set({ saveState: 'dirty' })
     clearSaveTimer()
     clearRetryTimer()
@@ -315,8 +323,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
             ...active,
             path: newPath,
             fileName: safeName,
-            displayTitle: extractDisplayTitle(active.content, safeName),
-            titleFromH1: titleComesFromH1(active.content),
+            displayTitle: extractDisplayTitle(latestText, safeName),
+            titleFromH1: titleComesFromH1(latestText),
           },
         })
       }
@@ -386,6 +394,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     // load-disk / save-copy：丢弃内存未保存部分，加载磁盘版本
     pendingText = null
     lastWrittenText = conflict.diskContent
+    latestText = conflict.diskContent
     editorBridge.setContent(conflict.diskContent, { preserveSelection: true })
     set((state) => ({
       activeDocument: state.activeDocument
@@ -442,6 +451,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       // no-op 守卫：内容没变化只更新元数据，避免无谓的 setState（滚动/光标跳动）
       pendingText = null
       lastWrittenText = disk.content
+      latestText = disk.content
       if (editorBridge.getContent() !== disk.content) {
         editorBridge.setContent(disk.content, { preserveSelection: true })
       }
@@ -475,8 +485,7 @@ function refreshActiveTitle() {
   const state = useDocumentStore.getState()
   const active = state.activeDocument
   if (!active) return
-  const text = pendingText ?? active.content
-  const info = extractTitleInfo(text, active.fileName)
+  const info = extractTitleInfo(latestText, active.fileName)
   if (info.title === active.displayTitle && info.fromH1 === active.titleFromH1) return
 
   useDocumentStore.setState((s) => ({
