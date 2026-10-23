@@ -5,10 +5,10 @@
  */
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useT } from '@/lib/i18n'
+import { errorMessage } from '@/lib/errors'
 import { useUiStore } from '@/stores/uiStore'
 
 export function LibraryBootstrap() {
@@ -23,21 +23,13 @@ export function LibraryBootstrap() {
   }, [])
 
 
-  const confirm = async (path: string) => {
-    if (!path) return
+  /** 选库在 Rust 侧完成（目录选择框 / 默认位置），Rust 据此授权文件访问 */
+  const choose = async (useDefault: boolean) => {
     try {
-      await invoke('ensure_directory', { path })
+      const path = await invoke<string | null>('choose_library', { useDefault })
+      if (path) setLibraryPath(path)
     } catch (error) {
-      useUiStore.getState().pushToast({ message: `${t('toast.createDirFailed')}: ${String(error)}`, kind: 'error' })
-      return
-    }
-    setLibraryPath(path)
-  }
-
-  const chooseDirectory = async () => {
-    const selected = await openDialog({ directory: true, multiple: false })
-    if (typeof selected === 'string') {
-      confirm(selected)
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
     }
   }
 
@@ -46,11 +38,11 @@ export function LibraryBootstrap() {
       <div className="ink-bootstrap-title">Ink.</div>
       <div className="ink-bootstrap-sub">Your words stay on your Mac.</div>
       <div className="flex flex-col items-center gap-2">
-        <button className="ink-button" data-primary="true" onClick={() => void chooseDirectory()}>
+        <button className="ink-button" data-primary="true" onClick={() => void choose(false)}>
           {t('bootstrap.choose')}
         </button>
         {defaultPath ? (
-          <button className="ink-button" onClick={() => void confirm(defaultPath)}>
+          <button className="ink-button" onClick={() => void choose(true)}>
             {t('bootstrap.useDefault')} {defaultPath.replace(/^\/Users\/[^/]+/, '~')}
           </button>
         ) : null}

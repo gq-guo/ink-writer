@@ -1,5 +1,7 @@
 import { EditorView, ViewPlugin } from '@codemirror/view'
 
+import { t } from '@/lib/i18n'
+
 /**
  * 搜索面板的装饰性增强（tooltip + 换行占位符）。
  *
@@ -10,16 +12,22 @@ import { EditorView, ViewPlugin } from '@codemirror/view'
  * 而不是指望一次性的初始化。
  */
 
-const TIPS: Record<string, string> = {
-  prev: '上一个匹配',
-  next: '下一个匹配',
-  select: '选中全部匹配',
-  replace: '替换',
-  replaceAll: '全部替换',
-  close: '关闭',
-  case: '区分大小写',
-  re: '正则表达式',
-  word: '全字匹配',
+/** 按钮 / 复选框的 name → i18n key（文案随当前语言） */
+const TIP_KEYS: Record<string, string> = {
+  prev: 'searchTip.prev',
+  next: 'searchTip.next',
+  select: 'searchTip.select',
+  replace: 'searchTip.replace',
+  replaceAll: 'searchTip.replaceAll',
+  close: 'searchTip.close',
+  case: 'searchTip.case',
+  re: 'searchTip.re',
+  word: 'searchTip.word',
+}
+
+function tipFor(name: string): string | undefined {
+  const key = TIP_KEYS[name]
+  return key ? t(key) : undefined
 }
 
 /** 给搜索面板里的控件补上 title（只补一次） */
@@ -36,12 +44,12 @@ export function decorateSearchPanel(panel: HTMLElement): void {
   }
 
   panel.querySelectorAll<HTMLElement>('button[name]').forEach((button) => {
-    const tip = TIPS[button.getAttribute('name') ?? '']
+    const tip = tipFor(button.getAttribute('name') ?? '')
     if (tip) button.title = tip
   })
 
   panel.querySelectorAll<HTMLInputElement>('label input[type="checkbox"]').forEach((input) => {
-    const tip = TIPS[input.name]
+    const tip = tipFor(input.name)
     const label = input.closest('label')
     if (tip && label) label.title = tip
   })

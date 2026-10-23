@@ -5,8 +5,9 @@
  */
 import { create } from 'zustand'
 import type { AppSettings } from '@/lib/types'
-import { readPersisted, writePersisted } from '@/lib/persist'
-import { syncLocale } from '@/lib/i18n'
+import { loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
+import { syncLocale, t } from '@/lib/i18n'
+import { useUiStore } from './uiStore'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
@@ -80,9 +81,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hydrate: async () => {
     const stored = await readPersisted<Partial<AppSettings>>('settings', {})
+    // 文档库只认 Rust 侧授权的路径；settings.libraryPath 仅作展示用的副本
+    const library = await loadAuthorizedLibrary()
     const merged: AppSettings = {
       ...DEFAULT_SETTINGS,
       ...stored,
+      ...(library ? { libraryPath: library.exists ? (library.path ?? '') : '' } : {}),
       fontSize: clamp(stored.fontSize ?? DEFAULT_SETTINGS.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max),
       lineHeight: clamp(stored.lineHeight ?? DEFAULT_SETTINGS.lineHeight, 1.4, 2.0),
       contentWidth: clamp(stored.contentWidth ?? DEFAULT_SETTINGS.contentWidth, 560, 960),
@@ -91,6 +95,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     applySettingsToDocument(merged)
     applyThemeToDocument(merged.theme)
     syncLocale(merged.locale)
+    // 库目录被删 / 改名 → 提示并回到引导页（spec §22.2）
+    if (library?.path && !library.exists) {
+      useUiStore
+        .getState()
+        .pushToast({ message: `${t('toast.libraryMissing')}: ${library.path}`, kind: 'error' })
+    }
   },
 
   update: (patch) => {

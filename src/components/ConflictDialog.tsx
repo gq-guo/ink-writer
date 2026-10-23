@@ -18,7 +18,7 @@ export function ConflictDialog() {
   const fileName = conflict.path.split('/').pop() ?? conflict.path
 
   return (
-    <OverlayShell onClose={() => undefined} variant="dialog" label="文件冲突">
+    <OverlayShell onClose={() => undefined} variant="dialog" label={t('conflict.label')}>
       <div className="ink-dialog-title">
         “{fileName}” {t('conflict.message')}
       </div>

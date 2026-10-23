@@ -62,44 +62,67 @@ describe('rename 的元数据隔离', () => {
   })
 })
 
-describe('删除活动文档（spec §12.3：保留内存，flush 重建）', () => {
+describe('删除活动文档', () => {
   beforeEach(() => {
     invokeMock.mockReset()
     vi.useFakeTimers()
   })
 
-  it('删除后不丢待写内容：activeDocument 保留，flush 重建文件', async () => {
+  function mockLibrary(options: { writeFails?: boolean } = {}) {
+    const calls: string[] = []
     const writes: string[] = []
+    let documents = [
+      { ...DOC, path: '/library/Note.md', fileName: 'Note.md' },
+      { ...DOC, path: '/library/Other.md', fileName: 'Other.md', displayTitle: 'Other' },
+    ]
     invokeMock.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      calls.push(command)
       switch (command) {
         case 'read_document':
           return { content: 'original', encoding: 'utf-8', mtime: 1000, size: 8, lineEnding: 'lf' }
         case 'write_document':
+          if (options.writeFails) throw { kind: 'message', data: 'disk full' }
           writes.push(String(args.content))
           return { mtime: 1001 }
         case 'delete_document':
+          documents = documents.filter((doc) => doc.path !== args.path)
           return undefined
         case 'list_documents':
-          return []
+          return documents
         default:
           return undefined
       }
     })
+    return { calls, writes }
+  }
 
+  it('先落盘未保存内容再移入废纸篓，然后切到下一篇', async () => {
+    const { calls, writes } = mockLibrary()
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Note.md')
 
-    // 有未保存修改时删除（模拟废纸篓）
     documentStore.getState().onEditorChange('modified content')
     await documentStore.getState().deleteDocument('/library/Note.md')
 
-    // 关键：activeDocument 必须保留，待写内容不得丢失
-    expect(documentStore.getState().activeDocument).not.toBeNull()
-    expect(documentStore.getState().activeDocument!.path).toBe('/library/Note.md')
+    // 未保存内容随文件一起进了废纸篓，可找回
+    expect(writes).toEqual(['modified content'])
+    expect(calls.indexOf('write_document')).toBeLessThan(calls.indexOf('delete_document'))
+    // 不再停留在已删除的文档上（否则继续打字会把文件重建出来）
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Other.md')
+  })
 
-    // 下次 flush 把内容写回（重建文件）
-    await documentStore.getState().flushSave()
-    expect(writes).toContain('modified content')
+  it('落盘失败时取消删除，内容不丢', async () => {
+    const { calls } = mockLibrary({ writeFails: true })
+    const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Note.md')
+
+    documentStore.getState().onEditorChange('modified content')
+    await documentStore.getState().deleteDocument('/library/Note.md')
+
+    expect(calls).not.toContain('delete_document')
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Note.md')
   })
 })
 
@@ -349,5 +372,82 @@ describe('标题重算（spec §7.3：编辑 H1 后 1s 内更新）', () => {
     const active = documentStore.getState().activeDocument!
     expect(active.displayTitle).toBe('Fresh')
     expect(active.titleFromH1).toBe(true)
+  })
+})
+
+describe('冲突三选一：另存副本', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('副本走不覆盖的 write_new_text_file，再加载磁盘版本', async () => {
+    const calls: { command: string; args: Record<string, unknown> }[] = []
+    invokeMock.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      calls.push({ command, args })
+      switch (command) {
+        case 'read_document':
+          return { content: 'mine', encoding: 'utf-8', mtime: 1000, size: 4, lineEnding: 'lf' }
+        case 'write_new_text_file':
+          return '/library/Note (Conflicted Copy) 2.md'
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore, editorStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
+    documentStore.getState().onEditorChange('mine, edited')
+    editorStore.getState().setConflict({
+      path: '/library/Note.md',
+      diskMtime: 2000,
+      diskContent: 'disk',
+    })
+
+    await documentStore.getState().resolveConflict('save-copy')
+
+    const copy = calls.find((call) => call.command === 'write_new_text_file')
+    expect(copy?.args).toEqual({
+      path: '/library/Note (Conflicted Copy).md',
+      content: 'mine, edited',
+    })
+    expect(calls.some((call) => call.command === 'write_text_file')).toBe(false)
+    expect(documentStore.getState().activeDocument!.content).toBe('disk')
+  })
+})
+
+describe('重命名撞名（spec §7.2：重名自动加 -2）', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('以 Rust 返回的实际文件名为准，并提示改成了什么', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'body', encoding: 'utf-8', mtime: 1000, size: 4, lineEnding: 'lf' }
+        case 'rename_document':
+          return '/library/t1-2.md'
+        case 'list_documents':
+          return []
+        default:
+          return undefined
+      }
+    })
+
+    const { documentStore } = await loadStores()
+    const { useUiStore } = await import('@/stores/uiStore')
+    await documentStore.getState().openDocument('/library/new.md')
+
+    await documentStore.getState().renameDocument('/library/new.md', 't1')
+
+    const active = documentStore.getState().activeDocument!
+    expect(active.path).toBe('/library/t1-2.md')
+    expect(active.fileName).toBe('t1-2.md')
+    expect(active.displayTitle).toBe('t1-2')
+    expect(useUiStore.getState().toasts.some((toast) => toast.message.includes('t1-2.md'))).toBe(
+      true,
+    )
   })
 })

@@ -102,7 +102,7 @@ pub fn watch_library(app: &AppHandle, path: &Path) -> Result<(), CommandError> {
     debouncer
         .watcher()
         .watch(path, RecursiveMode::Recursive)
-        .map_err(|e| CommandError::Message(format!("无法监听文档库：{}", e)))?;
+        .map_err(|e| CommandError::new("watchFailed", format!("{} ({})", path.display(), e)))?;
 
     *state.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(path.to_path_buf());
     Ok(())

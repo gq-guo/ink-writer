@@ -27,6 +27,7 @@ import { useEditorStore } from './editorStore'
 import { useSettingsStore } from './settingsStore'
 import { useUiStore } from './uiStore'
 import { t } from '@/lib/i18n'
+import { errorMessage } from '@/lib/errors'
 
 /** 自动保存防抖（spec §12.1） */
 const AUTOSAVE_DEBOUNCE_MS = 500
@@ -52,8 +53,8 @@ interface DocumentState {
   bootstrapped: boolean
 
   bootstrapLibrary: (libraryPath: string) => Promise<void>
-  /** 更换文档库位置：复制现有文档到新目录（不删旧库），再切换过去 */
-  changeLibrary: (newPath: string) => Promise<void>
+  /** 更换文档库位置：Rust 弹出目录选择框，复制现有文档（不删旧库）后切换过去 */
+  changeLibrary: () => Promise<void>
   refreshDocuments: () => Promise<void>
   createDocument: () => Promise<void>
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
@@ -87,6 +88,8 @@ let lastWrittenText = ''
  * 标题重算 / 重命名都必须读这里，否则改了 H1 列表也不会更新。
  */
 let latestText = ''
+/** 刚由本应用移入废纸篓的路径：watch 回来的 remove 事件不再提示「外部删除」 */
+let selfTrashedPath: string | null = null
 /** 写入队列，保证同一时间只有一个写入任务 */
 let writeChain: Promise<void> = Promise.resolve()
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -121,18 +124,6 @@ function isConflictError(error: unknown): { diskMtime: number } | null {
   return { diskMtime: 0 }
 }
 
-function errorMessage(error: unknown): string {
-  if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message)
-  }
-  if (error && typeof error === 'object' && 'data' in error) {
-    const data = (error as { data: unknown }).data
-    if (typeof data === 'string') return data
-  }
-  return '未知错误'
-}
-
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   documents: [],
   activeDocument: null,
@@ -144,16 +135,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
    * 扫描库目录 + 启动 watch（spec §5.3 / §12.3）
    */
   bootstrapLibrary: async (libraryPath: string) => {
-    // 库目录被删 / 改名 → 提示并回到引导页（spec §22.2）
-    const exists = await invoke<boolean>('path_exists', { path: libraryPath })
-    if (!exists) {
-      useUiStore
-        .getState()
-        .pushToast({ message: `${t('toast.libraryMissing')}: ${libraryPath}`, kind: 'error' })
-      useSettingsStore.getState().setLibraryPath('')
-      return
-    }
-
+    // 库目录是否还在由 settingsStore.hydrate（Rust get_library）判断
     set({ libraryPath })
     try {
       await invoke('set_watch_path', { path: libraryPath })
@@ -167,28 +149,25 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set({ bootstrapped: true })
   },
 
-  changeLibrary: async (newPath: string) => {
-    const oldPath = get().libraryPath
-    if (!newPath || newPath === oldPath) return
+  changeLibrary: async () => {
     await get().flushSave()
+    let result: { path: string; copied: number; skipped: number } | null
     try {
-      await invoke('ensure_directory', { path: newPath })
-      if (oldPath) {
-        const stats = await invoke<{ copied: number; skipped: number }>('copy_library', {
-          fromDir: oldPath,
-          toDir: newPath,
-        })
-        if (stats.copied > 0 || stats.skipped > 0) {
-          useUiStore
-            .getState()
-            .pushToast({ message: t('toast.libraryMoved', { count: stats.copied }), kind: 'info' })
-        }
-      }
+      result = await invoke<{ path: string; copied: number; skipped: number } | null>(
+        'change_library',
+      )
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
       return
     }
+    if (!result || result.path === get().libraryPath) return
+    if (result.copied > 0 || result.skipped > 0) {
+      useUiStore
+        .getState()
+        .pushToast({ message: t('toast.libraryMoved', { count: result.copied }), kind: 'info' })
+    }
 
+    const newPath = result.path
     useSettingsStore.getState().update({ libraryPath: newPath })
     set({ libraryPath: newPath })
     try {
@@ -265,7 +244,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       if (result.encoding === 'gbk') {
         useUiStore
           .getState()
-          .pushToast({ message: '已按 GBK 解码，保存时将转为 UTF-8', kind: 'info' })
+          .pushToast({ message: t('toast.gbkNotice'), kind: 'info' })
       }
 
       if (revealRange) {
@@ -315,6 +294,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     if (!safeName) return
     try {
       const newPath = await invoke<string>('rename_document', { path, newName: safeName })
+      // 重名时 Rust 会自动加 -2（spec §7.2），实际文件名以返回路径为准
+      const fileName = newPath.split('/').pop() ?? safeName
+      if (fileName !== safeName) {
+        useUiStore.getState().pushToast({
+          message: t('toast.renamedDeduped', { requested: safeName, name: fileName }),
+          kind: 'info',
+        })
+      }
       await get().refreshDocuments()
       const active = get().activeDocument
       if (active && active.path === path) {
@@ -322,8 +309,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
           activeDocument: {
             ...active,
             path: newPath,
-            fileName: safeName,
-            displayTitle: extractDisplayTitle(latestText, safeName),
+            fileName,
+            displayTitle: extractDisplayTitle(latestText, fileName),
             titleFromH1: titleComesFromH1(latestText),
           },
         })
@@ -341,19 +328,35 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   deleteDocument: async (path: string) => {
-    try {
-      await invoke('delete_document', { path })
-      await get().refreshDocuments()
-      const active = get().activeDocument
-      if (active && active.path === path) {
-        // 活动文档被删除：保留内存内容与 activeDocument —— 有未保存修改时
-        // 下次 flush 会重建文件（Rust 侧对不存在的文件跳过 mtime 检查）。
-        // 注意：绝不能在这里清空 activeDocument，否则待写内容永远丢失。
-        useUiStore.getState().pushToast({ message: t('toast.trashed'), kind: 'info' })
+    const isActive = get().activeDocument?.path === path
+    if (isActive) {
+      // 先把未保存内容落盘，再整份移入废纸篓（可从废纸篓找回）。
+      // 落盘失败 / 冲突未决时取消删除：切走后这部分内容就再也找不回了。
+      await get().flushSave()
+      const state = get().saveState
+      if (pendingText !== null || state === 'error' || state === 'conflict') {
+        useUiStore.getState().pushToast({ message: t('toast.deleteUnsaved'), kind: 'error' })
+        return
       }
-    } catch (error) {
-      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
     }
+
+    try {
+      selfTrashedPath = path
+      await invoke('delete_document', { path })
+    } catch (error) {
+      selfTrashedPath = null
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+      return
+    }
+
+    await get().refreshDocuments()
+    useUiStore.getState().pushToast({ message: t('toast.trashed'), kind: 'info' })
+    if (!isActive) return
+
+    // 切到下一篇（列表按 mtime 倒序）；库空了就新建，避免继续打字把文件重建出来
+    const next = get().documents.find((doc) => doc.path !== path)
+    if (next) await get().openDocument(next.path)
+    else await get().createDocument()
   },
 
   /**
@@ -381,9 +384,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       const stem = active.fileName.replace(/\.(md|markdown|mdown|txt)$/i, '')
       const copyPath = `${directory}/${stem} (Conflicted Copy).md`
       try {
-        await invoke('write_text_file', {
+        // 不能用 write_text_file：第二次冲突会把第一份副本覆盖掉
+        const savedPath = await invoke<string>('write_new_text_file', {
           path: copyPath,
-          content: editorBridge.getContent() || active.content,
+          content: editorBridge.getContent() || latestText,
+        })
+        useUiStore.getState().pushToast({
+          message: t('toast.savedCopy', { name: savedPath.split('/').pop() ?? savedPath }),
+          kind: 'info',
         })
       } catch (error) {
         useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
@@ -417,6 +425,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
     if (active && event.path === active.path) {
       if (event.kind === 'remove') {
+        if (event.path === selfTrashedPath) return
         useUiStore.getState().pushToast({ message: t('toast.externalDeleted'), kind: 'info' })
         void get().refreshDocuments()
         return

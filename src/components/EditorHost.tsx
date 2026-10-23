@@ -19,6 +19,7 @@ import { inkSyntaxHighlighting } from '@/editor/highlight'
 import { setTypewriterModeEffect } from '@/editor/typewriter'
 import { centerCursorEffect } from '@/editor/centering'
 import { registerEditorBridge } from '@/editor/bridge'
+import { errorMessage } from '@/lib/errors'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { resolveTheme, useSettingsStore } from '@/stores/settingsStore'
@@ -102,12 +103,12 @@ export function EditorHost() {
       },
       onOpenUrl: (url) => {
         void invoke('open_url', { url }).catch((error) => {
-          useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         })
       },
       onRevealPath: (path) => {
         void invoke('reveal_in_finder', { path }).catch((error) => {
-          useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         })
       },
       onError: (message) => {

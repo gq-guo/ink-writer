@@ -7,8 +7,6 @@ const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }))
-vi.mock('@tauri-apps/plugin-store', () => ({ load: vi.fn().mockResolvedValue(null) }))
 
 import App from '@/App'
 import { useDocumentStore } from '@/stores/documentStore'
@@ -43,8 +41,6 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
 
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
-        case 'path_exists':
-          return true
         case 'list_documents':
           return [
             {
@@ -97,8 +93,6 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
-        case 'path_exists':
-          return true
         case 'list_documents':
           return []
         case 'read_document':
@@ -140,8 +134,6 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
-        case 'path_exists':
-          return true
         case 'list_documents':
           return []
         case 'read_document':
@@ -181,8 +173,6 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
-        case 'path_exists':
-          return true
         case 'list_documents':
           return []
         case 'read_document':
@@ -213,10 +203,6 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
         case 'set_watch_path':
-          return undefined
-        case 'path_exists':
-          return true
-        case 'ensure_directory':
           return undefined
         case 'list_documents':
           return [

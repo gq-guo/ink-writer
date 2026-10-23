@@ -8,6 +8,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { EditorView } from '@codemirror/view'
 import { t } from '@/lib/i18n'
+import { errorMessage } from '@/lib/errors'
 
 export interface ImageHandlerOptions {
   /** 当前文档所在目录 */
@@ -50,7 +51,7 @@ async function insertImages(
       })
       snippets.push(`![${altFromName(file.name || relativePath)}](${relativePath})`)
     } catch (error) {
-      options.onError(error instanceof Error ? error.message : String(error))
+      options.onError(errorMessage(error))
     }
   }
 

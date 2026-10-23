@@ -25,8 +25,6 @@ export function TopBar() {
   const renameDocument = useDocumentStore((state) => state.renameDocument)
   const focusMode = useEditorStore((state) => state.focusMode)
   const typewriterMode = useSettingsStore((state) => state.settings.typewriterMode)
-  const setSidebarVisible = useUiStore((state) => state.setSidebarVisible)
-  void setSidebarVisible
   const showQuickOpen = useUiStore((state) => state.showQuickOpen)
   const renameSignal = useUiStore((state) => state.renameSignal)
 

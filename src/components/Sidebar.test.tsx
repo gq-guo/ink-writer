@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 import { Sidebar } from '@/components/Sidebar'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useUiStore } from '@/stores/uiStore'
+import { syncLocale } from '@/lib/i18n'
 
 const now = Date.now() / 1000
 
@@ -51,7 +52,14 @@ describe('Sidebar（spec W2）', () => {
     expect(screen.getByText('Earlier')).toBeInTheDocument()
   })
 
+  it('相对时间跟随界面语言（英文界面不显示「分钟前」）', () => {
+    syncLocale('en')
+    render(<Sidebar />)
+    expect(screen.getByText('just now')).toBeInTheDocument()
+  })
+
   it('条目显示 displayTitle 与相对时间', () => {
+    syncLocale('zh-CN')
     render(<Sidebar />)
     expect(screen.getByText('今天的文档')).toBeInTheDocument()
     expect(screen.getByText('刚刚')).toBeInTheDocument()

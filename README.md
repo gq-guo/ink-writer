@@ -29,8 +29,8 @@ open http://localhost:1420/preview.html?shell=1&dark=1&focus=1   # 深色 + Focu
 ```bash
 pnpm typecheck        # tsc --noEmit
 pnpm lint             # eslint
-pnpm test             # vitest（前端 67 个用例）
-cd src-tauri && cargo test   # Rust 13 个单测 + 6 个夹具集成测试
+pnpm test             # vitest（前端单测 / 组件测试）
+cd src-tauri && cargo test   # Rust 单测 + 夹具集成测试
 ```
 
 首次启动会进入 **空库引导**（spec W7）：选择文档库位置（默认 `~/Documents/Ink`），
@@ -50,7 +50,8 @@ spec §1 裁决 R2：**MVP = Phase 1–3 + HTML 导出 + 系统打印**。
 | **M4 Export** | ✅ | HTML 导出（单文件、内联样式）、系统打印（打印对话框内「存储为 PDF」） |
 | **M5 Polish** | 部分 | 错误状态矩阵、动效规范 + reduced-motion 已落地；签名公证 CI 未做（需证书，见 §六） |
 
-明确**不做**（spec R2 / PRD §26）：DOCX、直出 PDF、行内标记折叠、多窗口、自动更新、遥测（无任何网络请求）。
+明确**不做**（spec R2 / PRD §26）：DOCX、直出 PDF、行内标记折叠、多窗口、遥测。
+自动更新原属 v1.1，已提前接入（见 §六）。
 
 ---
 
@@ -132,7 +133,7 @@ ink-writer/
 | >5MB | Focus Mode 的 decoration 范围收窄为可见区间 ±50 行 |
 | >10MB | 性能模式：关闭语法高亮、禁用 Focus Mode 入口，并 Toast 提示 |
 
-### 5. 界面与效果图对齐（2024-XX 更新）
+### 6. 界面与效果图对齐
 
 按 `ink-writer-prd/效果图 1.png`、`效果图 2.png` 重做了界面：
 
@@ -154,7 +155,7 @@ ink-writer/
 > 状态栏常驻（spec W5 写的是 hover 才出现）；侧边栏分组保留 spec 的
 > Today / Yesterday / This Week / Earlier（效果图是 Today / Yesterday / Archive）。
 
-### 6. 查找面板（⌘F）
+### 7. 查找面板（⌘F）
 
 CM6 自带的搜索面板是「一排灰按钮」，与 Ink 的极简调性不符，因此重做了视觉层
 （**行为仍用 CM6 原生实现**，不重写搜索逻辑）：
@@ -170,7 +171,7 @@ CM6 自带的搜索面板是「一排灰按钮」，与 Ink 的极简调性不�
 > `.cm-search` 与 `.cm-panel` **是同一个元素**（不是父子）；
 > 且 `<br>` 在 flex 容器里会被浏览器忽略，需要插入占位元素才能换行。
 
-### 7. 光标居中（Focus Mode / Typewriter Mode 共用）
+### 8. 光标居中（Focus Mode / Typewriter Mode 共用）
 
 两个模式都会让「打字时当前行停在视口**垂直中心**」：
 
@@ -214,7 +215,7 @@ type-mid:  offset=0.3px    scrollTop=4760   ← 打字后精确居中，偏差 0
 move-only: scrollTopDelta=0                ← 只移动光标，视图不被拽动 ✓
 ```
 
-### 8. 统计口径（spec §16 / R4）
+### 9. 统计口径（spec §16 / R4）
 
 CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 分钟，向上取整，最小 1。
 >2MB 文档走 `requestIdleCallback` 按 512KB 分片计算，分片期间保持上次结果。
@@ -227,7 +228,7 @@ CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 
 |---|---|---|---|
 | 1 | §8.2 `inkFocusModeField` 为 `StateField<DecorationSet>` | 改为 `ViewPlugin` | 可见区间（`view.visibleRanges`）只在 View 上存在，StateField 无法只算可见区间；行为与 spec §9.2 一致 |
 | 2 | §12.3 使用 `tauri-plugin-fs` 的 `watch` | 改为 Rust 侧 `notify` + Tauri 事件 | 库目录可自定义，静态 capability scope 无法覆盖任意路径；`notify` 是 `tauri-plugin-fs` 的同源依赖，不增加新的依赖面 |
-| 3 | §7.4 capabilities 含 `fs:allow-read-write-recursive` | 文件 IO 全部走 Rust 命令，capability 只保留 `core/dialog/store/window-state` | 最小权限原则：Rust 侧按命令白名单校验，前端拿不到任意文件读写能力 |
+| 3 | §7.4 capabilities 含 `fs:allow-read-write-recursive` | 文件 IO 全部走 Rust 命令，capability 只保留 `core/window-state/updater`；每个文件命令按 `src-tauri/src/access.rs` 校验路径 | 最小权限原则：只放行文档库内的路径，以及用户在 Rust 弹出的对话框里亲手选过的文件（⌘O 打开 / 导出目标）。选库、打开、导出、换库的对话框都在 Rust 侧弹出，设置读写也改走 Rust 命令（store 插件能写任意路径），前端被注入脚本也碰不到库外文件 |
 | 4 | §5.1 `DocumentMeta` 无 `displayTitle` | 增加 `displayTitle` 字段（Rust 扫描时提取首个 H1） | Sidebar 需要在不读取全文的前提下显示标题；这是对契约的**增量扩展** |
 | 5 | §8.1 `EditorView.scrollIntoView` + smooth | 平滑滚动用 `scrollDOM.scrollTo({behavior:'smooth'})` | CM6 的 `scrollIntoView` 不支持 `behavior` 选项 |
 | 6 | §11.3 注册 14 条命令 | 注册 24 条（新增字体族 / 行高 / 栏宽 / 打印） | spec §5.2 的排版设置需要可达的入口；放进 Command Palette 而不是加设置面板，符合 Less UI 原则 |
@@ -267,7 +268,7 @@ CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 
 | 立即保存 | ⌘S |
 | Quick Open | ⌘P |
 | Command Palette | ⌘K |
-| 切换 Sidebar | ⌘\ |
+| 切换 Sidebar | ⌥\ |
 | 查找 | ⌘F |
 | Focus Mode | ⌘⇧F / Esc 退出 |
 | Typewriter Mode | ⌘⇧T |
@@ -282,4 +283,5 @@ IME 守卫：`event.isComposing === true` 时忽略一切快捷键（spec §11.1
 
 ## 八、隐私
 
-无网络请求、无遥测、无自动更新（spec §25）。所有文档只存在于本机文件系统中。
+无遥测、不埋点（spec §25）。唯一的网络请求是启动 3 秒后检查更新：读取 GitHub Release 的 `latest.json`（见 §六），
+不携带任何文档内容或个人数据。所有文档只存在于本机文件系统中。

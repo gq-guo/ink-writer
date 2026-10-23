@@ -47,30 +47,39 @@ pub struct WriteResult {
 pub enum CommandError {
     /// mtime 乐观锁失败：磁盘上的文件已被其他程序修改
     MtimeConflict { disk_mtime: i64 },
-    /// 普通错误（IO / 编码 / 权限 …）
-    Message(String),
+    /// 普通错误（IO / 编码 / 权限 …）：code 由前端按当前语言翻译（i18n 的 `error.<code>`），
+    /// detail 是路径 / 系统错误等不需要翻译的原文
+    Error { code: &'static str, detail: String },
 }
 
-impl From<String> for CommandError {
-    fn from(value: String) -> Self {
-        CommandError::Message(value)
+impl CommandError {
+    pub fn new(code: &'static str, detail: impl Into<String>) -> Self {
+        CommandError::Error {
+            code,
+            detail: detail.into(),
+        }
     }
 }
 
-impl From<&str> for CommandError {
-    fn from(value: &str) -> Self {
-        CommandError::Message(value.to_string())
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommandError::MtimeConflict { disk_mtime } => {
+                write!(f, "mtimeConflict: {}", disk_mtime)
+            }
+            CommandError::Error { code, detail } => write!(f, "{}: {}", code, detail),
+        }
     }
 }
 
 fn io_message(path: &Path, err: &std::io::Error) -> CommandError {
-    let kind = match err.kind() {
-        std::io::ErrorKind::PermissionDenied => "权限被拒绝",
-        std::io::ErrorKind::NotFound => "文件不存在",
-        std::io::ErrorKind::StorageFull => "磁盘空间不足",
-        _ => "操作失败",
+    let code = match err.kind() {
+        std::io::ErrorKind::PermissionDenied => "permissionDenied",
+        std::io::ErrorKind::NotFound => "notFound",
+        std::io::ErrorKind::StorageFull => "storageFull",
+        _ => "ioFailed",
     };
-    CommandError::Message(format!("{}：{}（{}）", kind, path.display(), err))
+    CommandError::new(code, format!("{} ({})", path.display(), err))
 }
 
 pub fn stat_info(path: &Path) -> Result<(i64, u64), CommandError> {
@@ -216,7 +225,8 @@ pub fn list_documents(root: &Path) -> Result<Vec<DocumentMeta>, CommandError> {
 /// 读取文档（自动处理编码，见 spec §13）
 pub fn read_document(path: &Path) -> Result<ReadDocumentResult, CommandError> {
     let bytes = fs::read(path).map_err(|e| io_message(path, &e))?;
-    let decoded = encoding::decode(&bytes).map_err(CommandError::Message)?;
+    let decoded = encoding::decode(&bytes)
+        .map_err(|_| CommandError::new("unknownEncoding", path.display().to_string()))?;
     let line_ending = encoding::detect_line_ending(&decoded.text).to_string();
     let content = encoding::normalize_to_lf(&decoded.text);
     let (mtime, size) = stat_info(path)?;
@@ -293,6 +303,34 @@ pub fn write_text_file(path: &Path, content: &str) -> Result<(), CommandError> {
     atomic_write(path, content.as_bytes())
 }
 
+/// 写出新文件，绝不覆盖已有文件：`X.md` 被占用时依次尝试 `X 2.md`、`X 3.md`……
+/// 返回实际写入的路径（冲突副本用，第二次冲突不能冲掉第一份副本）
+pub fn write_new_text_file(path: &Path, content: &str) -> Result<String, CommandError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    let (stem, ext) = match file_name.rfind('.') {
+        Some(idx) if idx > 0 => (file_name[..idx].to_string(), file_name[idx..].to_string()),
+        _ => (file_name.clone(), String::new()),
+    };
+
+    let mut target = path.to_path_buf();
+    let mut counter = 2;
+    while target.exists() {
+        target = parent.join(format!("{} {}{}", stem, counter, ext));
+        counter += 1;
+        if counter > 9999 {
+            return Err(CommandError::new("tooManyDuplicates", file_name));
+        }
+    }
+    atomic_write(&target, content.as_bytes())?;
+    Ok(target.to_string_lossy().to_string())
+}
+
 /// 在目录中创建新文档，取最小未占用序号：`Untitled.md` → `Untitled 2.md`
 pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, CommandError> {
     fs::create_dir_all(dir).map_err(|e| io_message(dir, &e))?;
@@ -311,38 +349,55 @@ pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, Comm
         name = format!("{} {}.{}", base, counter, MARKDOWN_EXT);
         counter += 1;
         if counter > 9999 {
-            return Err(CommandError::Message(
-                "目录中文件过多，无法创建新文档".into(),
-            ));
+            return Err(CommandError::new("tooManyDuplicates", base));
         }
     }
 
     let path = dir.join(&name);
     atomic_write(&path, b"")?;
-    meta_for(&path, dir).ok_or_else(|| CommandError::Message("创建文档失败".into()))
+    meta_for(&path, dir)
+        .ok_or_else(|| CommandError::new("createFailed", path.display().to_string()))
 }
 
-/// 重命名（仅同目录）
+/// 重命名（仅同目录，spec §7.2）：目标名已被占用时自动加 `-2`、`-3`……，返回实际路径
 pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandError> {
     let parent = path
         .parent()
-        .ok_or_else(|| CommandError::Message("无效的文件路径".into()))?;
-    let target = parent.join(new_name);
-    // 大小写变体（aa.md → AA.md）在同一文件上，macOS 大小写不敏感文件系统
-    // 下 target.exists() 为 true，需按 canonical 路径判断是否同一文件
-    let same_file = fs::canonicalize(&target)
-        .ok()
-        .zip(fs::canonicalize(path).ok())
-        .map(|(a, b)| a == b)
-        .unwrap_or(false);
-    if !same_file && target.exists() {
-        return Err(CommandError::Message(format!(
-            "已存在同名文件：{}",
-            new_name
-        )));
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    // 只接受单个文件名：`../x.md` 或 `a/b.md` 会把文件挪出原目录
+    let mut components = Path::new(new_name).components();
+    if !matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) {
+        return Err(CommandError::new("invalidFileName", new_name));
+    }
+
+    let (stem, ext) = match new_name.rfind('.') {
+        Some(idx) if idx > 0 => (&new_name[..idx], &new_name[idx..]),
+        _ => (new_name, ""),
+    };
+    let mut target = parent.join(new_name);
+    let mut counter = 2;
+    while target.exists() && !is_same_file(&target, path) {
+        target = parent.join(format!("{}-{}{}", stem, counter, ext));
+        counter += 1;
+        if counter > 9999 {
+            return Err(CommandError::new("tooManyDuplicates", new_name));
+        }
     }
     fs::rename(path, &target).map_err(|e| io_message(path, &e))?;
     Ok(target.to_string_lossy().to_string())
+}
+
+/// 大小写变体（aa.md → AA.md）在 macOS 大小写不敏感文件系统上是同一个文件，
+/// target.exists() 为 true，需按 canonical 路径判断
+fn is_same_file(a: &Path, b: &Path) -> bool {
+    fs::canonicalize(a)
+        .ok()
+        .zip(fs::canonicalize(b).ok())
+        .map(|(a, b)| a == b)
+        .unwrap_or(false)
 }
 
 /** 复制整个文档库（更换保存位置用）：复制 .md 与 assets，重名跳过，不删除旧库 */
@@ -354,7 +409,10 @@ pub struct CopyStats {
 }
 
 pub fn copy_library(from: &Path, to: &Path) -> Result<CopyStats, CommandError> {
-    let mut stats = CopyStats { copied: 0, skipped: 0 };
+    let mut stats = CopyStats {
+        copied: 0,
+        skipped: 0,
+    };
     copy_library_inner(from, to, &mut stats)?;
     Ok(stats)
 }
@@ -371,7 +429,9 @@ fn copy_library_inner(from: &Path, to: &Path, stats: &mut CopyStats) -> Result<(
         }
         let source = entry.path();
         let target = to.join(&name);
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if file_type.is_dir() {
             // 只复制文档内容（.md 与 assets 等媒体目录），其他目录也一并复制以保持相对结构
             fs::create_dir_all(&target).map_err(|e| io_message(&target, &e))?;
@@ -419,24 +479,10 @@ fn copy_dir(source: &Path, target: &Path) -> Result<(), CommandError> {
 /// 移入系统废纸篓（不做应用内硬删除）
 pub fn delete_document(path: &Path) -> Result<(), CommandError> {
     if !path.exists() {
-        return Err(CommandError::Message("文件已不存在".into()));
+        return Err(CommandError::new("notFound", path.display().to_string()));
     }
-    trash::delete(path).map_err(|e| CommandError::Message(format!("移入废纸篓失败：{}", e)))
-}
-
-/// 复制图片到文档同级的 assets/，重名追加 -2/-3，返回相对路径
-pub fn copy_image(doc_dir: &Path, source: &Path) -> Result<String, CommandError> {
-    let assets = doc_dir.join("assets");
-    fs::create_dir_all(&assets).map_err(|e| io_message(&assets, &e))?;
-
-    let original = source
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "image.png".into());
-
-    let name = unique_asset_name(&assets, &original);
-    fs::copy(source, assets.join(&name)).map_err(|e| io_message(source, &e))?;
-    Ok(format!("assets/{}", name))
+    trash::delete(path)
+        .map_err(|e| CommandError::new("trashFailed", format!("{} ({})", path.display(), e)))
 }
 
 /// 写入图片字节（拖拽 / 粘贴），重名追加 -2/-3，返回相对路径
@@ -545,6 +591,52 @@ mod tests {
     }
 
     #[test]
+    fn write_new_text_file_never_overwrites() {
+        let dir = temp_dir("newfile");
+        let path = dir.join("Note (Conflicted Copy).md");
+
+        let first = write_new_text_file(&path, "first").unwrap();
+        let second = write_new_text_file(&path, "second").unwrap();
+
+        assert_eq!(first, path.to_string_lossy());
+        assert!(second.ends_with("Note (Conflicted Copy) 2.md"));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "first");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second");
+    }
+
+    #[test]
+    fn rename_to_taken_name_appends_suffix() {
+        let dir = temp_dir("rename-taken");
+        fs::write(dir.join("t1.md"), "taken").unwrap();
+        fs::write(dir.join("t1-2.md"), "taken too").unwrap();
+        fs::write(dir.join("new.md"), "mine").unwrap();
+
+        let renamed = rename_document(&dir.join("new.md"), "t1.md").unwrap();
+
+        assert!(renamed.ends_with("t1-3.md"));
+        assert_eq!(fs::read_to_string(&renamed).unwrap(), "mine");
+        assert_eq!(fs::read_to_string(dir.join("t1.md")).unwrap(), "taken");
+        assert!(!dir.join("new.md").exists());
+    }
+
+    #[test]
+    fn rename_to_own_name_keeps_it() {
+        let dir = temp_dir("rename-same");
+        fs::write(dir.join("note.md"), "x").unwrap();
+        let renamed = rename_document(&dir.join("note.md"), "note.md").unwrap();
+        assert!(renamed.ends_with("note.md"));
+    }
+
+    #[test]
+    fn rename_rejects_names_leaving_directory() {
+        let dir = temp_dir("rename-escape");
+        fs::write(dir.join("note.md"), "x").unwrap();
+        assert!(rename_document(&dir.join("note.md"), "../escaped.md").is_err());
+        assert!(rename_document(&dir.join("note.md"), "sub/escaped.md").is_err());
+        assert!(dir.join("note.md").exists());
+    }
+
+    #[test]
     fn create_document_picks_free_sequence() {
         let dir = temp_dir("create");
         let first = create_document(&dir, "Untitled").unwrap();
@@ -580,12 +672,10 @@ mod tests {
     #[test]
     fn copy_image_dedupes() {
         let dir = temp_dir("image");
-        let src = dir.join("shot.png");
-        fs::write(&src, b"png").unwrap();
         let doc_dir = dir.join("doc");
         fs::create_dir_all(&doc_dir).unwrap();
-        let a = copy_image(&doc_dir, &src).unwrap();
-        let b = copy_image(&doc_dir, &src).unwrap();
+        let a = copy_image_bytes(&doc_dir, "shot.png", b"png").unwrap();
+        let b = copy_image_bytes(&doc_dir, "shot.png", b"png").unwrap();
         assert_eq!(a, "assets/shot.png");
         assert_eq!(b, "assets/shot-2.png");
         let _ = fs::remove_dir_all(&dir);

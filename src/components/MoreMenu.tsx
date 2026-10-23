@@ -4,7 +4,6 @@
  * 文档级操作：收藏 / 重命名 / 在访达中显示 / 导出 / 打印 / 移入废纸篓。
  */
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 import { useDocumentStore } from '@/stores/documentStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -114,12 +113,7 @@ export function MoreMenu({ onClose }: { onClose: () => void }) {
       <button
         className="ink-menu-item"
         onClick={() => {
-          void (async () => {
-            const selected = await openDialog({ directory: true, multiple: false })
-            if (typeof selected === 'string') {
-              await useDocumentStore.getState().changeLibrary(selected)
-            }
-          })()
+          void useDocumentStore.getState().changeLibrary()
           onClose()
         }}
       >

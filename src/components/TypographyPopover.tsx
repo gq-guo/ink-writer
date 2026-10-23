@@ -35,7 +35,7 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
   const update = useSettingsStore((state) => state.update)
 
   return (
-    <div className="ink-popover" role="dialog" aria-label="排版">
+    <div className="ink-popover" role="dialog" aria-label={t('topbar.typography')}>
       <div className="ink-popover-title">{t('type.title')}</div>
       <div className="ink-font-list">
         {(Object.keys(FONT_LABEL_KEYS) as AppSettings['fontFamily'][]).map((family) => (

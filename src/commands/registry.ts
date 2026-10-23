@@ -4,7 +4,6 @@
  * Command Palette 的数据源；每条命令带 id / 标题 / 快捷键 / 执行动作。
  */
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 
 import { buildStandaloneHtml } from '@/lib/export-html'
 import { editorBridge } from '@/editor/bridge'
@@ -13,6 +12,7 @@ import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { t } from '@/lib/i18n'
+import { errorMessage } from '@/lib/errors'
 
 export type CommandGroup = 'file' | 'edit' | 'view' | 'mode' | 'type' | 'doc'
 
@@ -43,13 +43,12 @@ export function buildCommands(): Command[] {
       title: t('cmd.doc.open'),
       shortcut: '⌘O',
       run: async () => {
-        const selected = await openDialog({
-          multiple: false,
-          directory: false,
-          filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] }],
-        })
-        if (typeof selected === 'string') {
-          await useDocumentStore.getState().openDocument(selected)
+        // 文件选择框由 Rust 弹出：Rust 只放行用户亲手选中的库外文件
+        try {
+          const selected = await invoke<string | null>('pick_document')
+          if (selected) await useDocumentStore.getState().openDocument(selected)
+        } catch (error) {
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         }
       },
     },
@@ -136,16 +135,17 @@ export function buildCommands(): Command[] {
         const active = state.activeDocument
         if (!active) return
         const html = buildStandaloneHtml(active.displayTitle, editorBridge.getContent() || active.content)
-        const target = await saveDialog({
-          defaultPath: `${active.fileName.replace(/\.md$/i, '')}.html`,
-          filters: [{ name: 'HTML', extensions: ['html'] }],
-        })
-        if (!target) return
+        const docDir = active.path.slice(0, active.path.lastIndexOf('/'))
         try {
+          // 保存对话框由 Rust 弹出：write_text_file 只能写到这里选定的目标
+          const target = await invoke<string | null>('pick_export_target', {
+            defaultName: `${active.fileName.replace(/\.md$/i, '')}.html`,
+            defaultDir: docDir,
+          })
+          if (!target) return
           await invoke('write_text_file', { path: target, content: html })
 
           // 导出到其他目录时，把 assets 一并复制过去（图片相对路径才能解析）
-          const docDir = active.path.slice(0, active.path.lastIndexOf('/'))
           const targetDir = target.slice(0, target.lastIndexOf('/'))
           if (docDir !== targetDir) {
             await invoke('copy_assets', { fromDir: docDir, toDir: targetDir })
@@ -153,7 +153,7 @@ export function buildCommands(): Command[] {
 
           useUiStore.getState().pushToast({ message: t('toast.exportedHtml'), kind: 'success' })
         } catch (error) {
-          useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         }
       },
     },
@@ -173,7 +173,7 @@ export function buildCommands(): Command[] {
         try {
           await invoke('print_current')
         } catch (error) {
-          useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         } finally {
           // 打印对话框关闭后再移除（macOS 上 print 是异步的，延迟移除更安全）
           setTimeout(() => root.remove(), 1000)
@@ -201,7 +201,7 @@ export function buildCommands(): Command[] {
         try {
           await invoke('reveal_in_finder', { path: active.path })
         } catch (error) {
-          useUiStore.getState().pushToast({ message: String(error), kind: 'error' })
+          useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         }
       },
       when: () => useDocumentStore.getState().activeDocument !== null,
@@ -216,6 +216,12 @@ export function buildCommands(): Command[] {
         await useDocumentStore.getState().deleteDocument(active.path)
       },
       when: () => useDocumentStore.getState().activeDocument !== null,
+    },
+    {
+      group: 'file',
+      id: 'library.change',
+      title: t('cmd.library.change'),
+      run: () => useDocumentStore.getState().changeLibrary(),
     },
   ]
 }

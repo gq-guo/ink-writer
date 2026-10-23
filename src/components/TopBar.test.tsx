@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -58,17 +58,12 @@ describe('TopBar 文件名内联重命名', () => {
     expect(renameDocument).not.toHaveBeenCalled()
   })
 
-  it('requestRename 信号触发编辑态（命令/菜单入口）', () => {
+  it('requestRename 信号触发编辑态（命令/菜单入口）', async () => {
     render(<TopBar />)
     expect(screen.queryByDisplayValue('Untitled')).not.toBeInTheDocument()
-    useUiStore.getState().requestRename()
-    // setTimeout(0) 延迟执行
-    return new Promise<void>((resolve) =>
-      setTimeout(() => {
-        expect(screen.getByDisplayValue('Untitled')).toBeInTheDocument()
-        resolve()
-      }, 10),
-    )
+    act(() => useUiStore.getState().requestRename())
+    // 组件内用 setTimeout(0) 延迟进入编辑态；findBy* 在 act 里轮询等待
+    expect(await screen.findByDisplayValue('Untitled')).toBeInTheDocument()
   })
 
   it('排版面板 Esc 关闭', async () => {

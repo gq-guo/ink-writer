@@ -22,6 +22,8 @@ import { UpdateDialog } from '@/components/UpdateDialog'
 import { scheduleUpdateCheck } from '@/lib/updater'
 import { WindowDragRegion } from '@/components/WindowDragRegion'
 import { readPersisted, writePersisted } from '@/lib/persist'
+import { errorMessage } from '@/lib/errors'
+import { t } from '@/lib/i18n'
 import { useDocumentStore, type FsEventPayload } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -72,7 +74,7 @@ export default function App() {
         // 启动链不再无声失败（此前 HMR 重载异常会让 documents 永远为空）
         useUiStore
           .getState()
-          .pushToast({ message: `启动失败：${String(error)}`, kind: 'error' })
+          .pushToast({ message: t('toast.startupFailed', { error: errorMessage(error) }), kind: 'error' })
       }
     })()
   }, [hydrated, libraryPath])
@@ -91,7 +93,7 @@ export default function App() {
     void listen<string>('ink://fs-error', (event) => {
       useUiStore
         .getState()
-        .pushToast({ message: `文件监听异常：${event.payload}`, kind: 'error' })
+        .pushToast({ message: t('toast.watchError', { error: event.payload }), kind: 'error' })
     }).then((fn) => {
       unlistenError = fn
     })

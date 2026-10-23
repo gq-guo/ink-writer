@@ -4,6 +4,7 @@
 //! - 所有文件写入走「临时文件 + fsync + rename」的原子写，并带 mtime 乐观锁
 //! - 库目录可自定义，监听随之切换
 //! - 编码永远以 UTF-8 写出，读取时兼容 GBK
+mod access;
 mod encoding;
 mod fs_ops;
 mod search;
@@ -12,32 +13,297 @@ mod watcher;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use tauri::{Manager, WebviewWindow};
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_store::StoreExt;
+
+use access::AccessState;
 
 use fs_ops::{CommandError, DocumentMeta, ReadDocumentResult, WriteResult};
 use search::SearchHit;
+
+/// 应用设置文件（AppSettings / UI 快照 / 已授权的文档库）
+const SETTINGS_STORE: &str = "settings.json";
 
 fn to_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+type AccessGuard<'a> = std::sync::MutexGuard<'a, access::Access>;
+
+fn lock<'a>(state: &'a State<'_, AccessState>) -> AccessGuard<'a> {
+    state.0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn store_error(error: impl std::fmt::Display) -> CommandError {
+    CommandError::new("settingsIo", error.to_string())
+}
+
+// ── 文档库授权 ──────────────────────────────────────────────
+
+/// settings.json 中由 Rust 独占的键：已授权的文档库路径（前端无法写入）
+const LIBRARY_KEY: &str = "authorizedLibrary";
+/// 前端可读写的持久化键（其余键一律拒绝，见 load_persisted / save_persisted）
+const PERSISTED_KEYS: [&str; 2] = ["settings", "ui"];
+
+fn persist_library(app: &AppHandle, root: &Path) -> Result<(), CommandError> {
+    let store = app.store(SETTINGS_STORE).map_err(store_error)?;
+    store.set(LIBRARY_KEY, root.to_string_lossy().to_string());
+    store.save().map_err(store_error)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryStatus {
+    /// 已授权的文档库；exists = false 时为已失效的旧路径
+    path: Option<String>,
+    exists: bool,
+}
+
+/// 启动时读取已授权的文档库。
+/// 旧版本只把路径存在前端的 settings.libraryPath 里：首次升级时迁移一次，之后只认 Rust 写入的键。
 #[tauri::command]
-fn list_documents(root: String) -> Result<Vec<DocumentMeta>, CommandError> {
-    fs_ops::list_documents(&to_path(&root))
+fn get_library(
+    app: AppHandle,
+    state: State<'_, AccessState>,
+) -> Result<LibraryStatus, CommandError> {
+    if let Some(root) = lock(&state).library() {
+        return Ok(LibraryStatus {
+            path: Some(root.to_string_lossy().to_string()),
+            exists: root.is_dir(),
+        });
+    }
+
+    let store = app.store(SETTINGS_STORE).map_err(store_error)?;
+    let authorized = store
+        .get(LIBRARY_KEY)
+        .and_then(|value| value.as_str().map(str::to_string));
+    let migrated = authorized.is_none();
+    let candidate = authorized.or_else(|| {
+        store
+            .get("settings")
+            .and_then(|settings| settings.get("libraryPath")?.as_str().map(str::to_string))
+            .filter(|path| !path.is_empty())
+    });
+
+    let Some(candidate) = candidate else {
+        return Ok(LibraryStatus {
+            path: None,
+            exists: false,
+        });
+    };
+    match lock(&state).set_library(Path::new(&candidate)) {
+        Ok(root) => {
+            if migrated {
+                persist_library(&app, &root)?;
+            }
+            Ok(LibraryStatus {
+                path: Some(root.to_string_lossy().to_string()),
+                exists: true,
+            })
+        }
+        Err(_) => Ok(LibraryStatus {
+            path: Some(candidate),
+            exists: false,
+        }),
+    }
+}
+
+/// 首次启动选库（spec W7）：use_default = 默认 ~/Documents/Ink，否则弹出目录选择框。
+/// 取消返回 None。
+#[tauri::command]
+async fn choose_library(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AccessState>,
+    use_default: bool,
+) -> Result<Option<String>, CommandError> {
+    let picked = if use_default {
+        let documents = app
+            .path()
+            .document_dir()
+            .map_err(|e| CommandError::new("documentsDirMissing", e.to_string()))?;
+        documents.join("Ink")
+    } else {
+        match app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .blocking_pick_folder()
+        {
+            Some(path) => path
+                .into_path()
+                .map_err(|e| CommandError::new("dialogFailed", e.to_string()))?,
+            None => return Ok(None),
+        }
+    };
+    std::fs::create_dir_all(&picked).map_err(|e| {
+        CommandError::new("createDirFailed", format!("{} ({})", picked.display(), e))
+    })?;
+
+    let root = lock(&state).set_library(&picked)?;
+    persist_library(&app, &root)?;
+    Ok(Some(root.to_string_lossy().to_string()))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangeLibraryResult {
+    path: String,
+    copied: u64,
+    skipped: u64,
+}
+
+/// 更换文档库：弹出目录选择框 → 复制现有文档（同名跳过、不删旧库）→ 切换授权。取消返回 None。
+#[tauri::command]
+async fn change_library(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AccessState>,
+) -> Result<Option<ChangeLibraryResult>, CommandError> {
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let picked = picked
+        .into_path()
+        .map_err(|e| CommandError::new("dialogFailed", e.to_string()))?;
+    let target = access::normalize(&picked)?;
+
+    let current = lock(&state).library().map(Path::to_path_buf);
+    let stats = match &current {
+        Some(old) if old != &target => fs_ops::copy_library(old, &target)?,
+        _ => fs_ops::CopyStats {
+            copied: 0,
+            skipped: 0,
+        },
+    };
+
+    let root = lock(&state).set_library(&target)?;
+    persist_library(&app, &root)?;
+    Ok(Some(ChangeLibraryResult {
+        path: root.to_string_lossy().to_string(),
+        copied: stats.copied,
+        skipped: stats.skipped,
+    }))
+}
+
+/// ⌘O：弹出文件选择框，授权所选的库外文档。取消返回 None。
+#[tauri::command]
+async fn pick_document(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AccessState>,
+) -> Result<Option<String>, CommandError> {
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .add_filter("Markdown", &["md", "markdown", "mdown", "txt"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|e| CommandError::new("dialogFailed", e.to_string()))?;
+    lock(&state).grant_opened_file(&path)?;
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
+/// 导出：弹出保存对话框，授权所选目标文件。取消返回 None。
+#[tauri::command]
+async fn pick_export_target(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AccessState>,
+    default_name: String,
+    default_dir: Option<String>,
+) -> Result<Option<String>, CommandError> {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .set_file_name(default_name)
+        .add_filter("HTML", &["html"]);
+    if let Some(dir) = default_dir {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(picked) = dialog.blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|e| CommandError::new("dialogFailed", e.to_string()))?;
+    lock(&state).grant_export_target(&path)?;
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
+// ── 应用设置持久化（替代前端直接使用 store 插件）──────────────
+
+fn check_persisted_key(key: &str) -> Result<(), CommandError> {
+    if PERSISTED_KEYS.contains(&key) {
+        Ok(())
+    } else {
+        Err(CommandError::new("unsupportedSetting", key))
+    }
 }
 
 #[tauri::command]
-fn read_document(path: String) -> Result<ReadDocumentResult, CommandError> {
-    fs_ops::read_document(&to_path(&path))
+fn load_persisted(app: AppHandle, key: String) -> Result<Option<serde_json::Value>, CommandError> {
+    check_persisted_key(&key)?;
+    let store = app.store(SETTINGS_STORE).map_err(store_error)?;
+    Ok(store.get(&key))
+}
+
+#[tauri::command]
+fn save_persisted(
+    app: AppHandle,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), CommandError> {
+    check_persisted_key(&key)?;
+    let store = app.store(SETTINGS_STORE).map_err(store_error)?;
+    store.set(key, value);
+    store.save().map_err(store_error)
+}
+
+// ── 文档操作（全部先过授权校验）──────────────────────────────
+
+#[tauri::command]
+fn list_documents(
+    state: State<'_, AccessState>,
+    root: String,
+) -> Result<Vec<DocumentMeta>, CommandError> {
+    let root = to_path(&root);
+    lock(&state).check_library_root(&root)?;
+    fs_ops::list_documents(&root)
+}
+
+#[tauri::command]
+fn read_document(
+    state: State<'_, AccessState>,
+    path: String,
+) -> Result<ReadDocumentResult, CommandError> {
+    let path = to_path(&path);
+    lock(&state).check_document(&path)?;
+    fs_ops::read_document(&path)
 }
 
 #[tauri::command]
 fn write_document(
+    state: State<'_, AccessState>,
     path: String,
     content: String,
     expected_mtime: Option<i64>,
 ) -> Result<WriteResult, CommandError> {
     let target = to_path(&path);
+    lock(&state).check_document(&target)?;
     let result = fs_ops::write_document(&target, &content, expected_mtime);
     if result.is_ok() {
         watcher::record_self_write(&target);
@@ -46,14 +312,27 @@ fn write_document(
 }
 
 #[tauri::command]
-fn create_document(dir: String, base_name: String) -> Result<DocumentMeta, CommandError> {
-    fs_ops::create_document(&to_path(&dir), &base_name)
+fn create_document(
+    state: State<'_, AccessState>,
+    dir: String,
+    base_name: String,
+) -> Result<DocumentMeta, CommandError> {
+    let dir = to_path(&dir);
+    lock(&state).check_document_dir(&dir)?;
+    fs_ops::create_document(&dir, &base_name)
 }
 
 #[tauri::command]
-fn rename_document(path: String, new_name: String) -> Result<String, CommandError> {
+fn rename_document(
+    state: State<'_, AccessState>,
+    path: String,
+    new_name: String,
+) -> Result<String, CommandError> {
     let source = to_path(&path);
+    let mut access = lock(&state);
+    access.check_document(&source)?;
     let new_path = fs_ops::rename_document(&source, &new_name)?;
+    access.rename_opened_file(&source, Path::new(&new_path));
     // 自身 rename 产生的 watch 事件不应触发前端刷新/静默重载
     watcher::record_self_write(&source);
     watcher::record_self_write(Path::new(&new_path));
@@ -61,65 +340,95 @@ fn rename_document(path: String, new_name: String) -> Result<String, CommandErro
 }
 
 #[tauri::command]
-fn delete_document(path: String) -> Result<(), CommandError> {
-    fs_ops::delete_document(&to_path(&path))
-}
-
-#[tauri::command]
-fn copy_image(doc_dir: String, source_path: String) -> Result<String, CommandError> {
-    fs_ops::copy_image(&to_path(&doc_dir), &to_path(&source_path))
+fn delete_document(state: State<'_, AccessState>, path: String) -> Result<(), CommandError> {
+    let path = to_path(&path);
+    lock(&state).check_document(&path)?;
+    fs_ops::delete_document(&path)
 }
 
 #[tauri::command]
 fn copy_image_bytes(
+    state: State<'_, AccessState>,
     doc_dir: String,
     file_name: String,
     bytes: Vec<u8>,
 ) -> Result<String, CommandError> {
-    fs_ops::copy_image_bytes(&to_path(&doc_dir), &file_name, &bytes)
+    let doc_dir = to_path(&doc_dir);
+    lock(&state).check_document_dir(&doc_dir)?;
+    fs_ops::copy_image_bytes(&doc_dir, &file_name, &bytes)
 }
 
 #[tauri::command]
-fn search_content(root: String, query: String) -> Result<Vec<SearchHit>, CommandError> {
-    search::search_content(&to_path(&root), &query)
+fn search_content(
+    state: State<'_, AccessState>,
+    root: String,
+    query: String,
+) -> Result<Vec<SearchHit>, CommandError> {
+    let root = to_path(&root);
+    lock(&state).check_library_root(&root)?;
+    search::search_content(&root, &query)
+}
+
+/// 写出导出文件：只能写到导出对话框选定的目标
+#[tauri::command]
+fn write_text_file(
+    state: State<'_, AccessState>,
+    path: String,
+    content: String,
+) -> Result<(), CommandError> {
+    let path = to_path(&path);
+    // 开发期光标居中自检（src/editor/selftest.ts）的结果文件
+    #[cfg(debug_assertions)]
+    if path == Path::new("/tmp/ink-selftest.txt") {
+        return fs_ops::write_text_file(&path, &content);
+    }
+    lock(&state).check_export_target(&path)?;
+    fs_ops::write_text_file(&path, &content)
+}
+
+/// 写出新文件（重名自动加序号，不覆盖），返回实际路径
+#[tauri::command]
+fn write_new_text_file(
+    state: State<'_, AccessState>,
+    path: String,
+    content: String,
+) -> Result<String, CommandError> {
+    let path = to_path(&path);
+    let dir = path
+        .parent()
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    lock(&state).check_document_dir(dir)?;
+    fs_ops::write_new_text_file(&path, &content)
 }
 
 #[tauri::command]
-fn write_text_file(path: String, content: String) -> Result<(), CommandError> {
-    fs_ops::write_text_file(&to_path(&path), &content)
+fn copy_assets(
+    state: State<'_, AccessState>,
+    from_dir: String,
+    to_dir: String,
+) -> Result<(), CommandError> {
+    let (from_dir, to_dir) = (to_path(&from_dir), to_path(&to_dir));
+    {
+        let access = lock(&state);
+        access.check_document_dir(&from_dir)?;
+        access.check_export_dir(&to_dir)?;
+    }
+    fs_ops::copy_assets(&from_dir, &to_dir)
 }
 
 #[tauri::command]
-fn copy_assets(from_dir: String, to_dir: String) -> Result<(), CommandError> {
-    fs_ops::copy_assets(&to_path(&from_dir), &to_path(&to_dir))
-}
-
-/// 更换文档库：复制现有文档到目标目录（不删除旧库）
-#[tauri::command]
-fn copy_library(from_dir: String, to_dir: String) -> Result<fs_ops::CopyStats, CommandError> {
-    fs_ops::copy_library(&to_path(&from_dir), &to_path(&to_dir))
-}
-
-#[tauri::command]
-fn set_watch_path(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
-    watcher::watch_library(&app, Path::new(&path))
-}
-
-/// 路径是否存在
-#[tauri::command]
-fn path_exists(path: String) -> bool {
-    Path::new(&path).exists()
-}
-
-/// 创建目录（含父目录）
-#[tauri::command]
-fn ensure_directory(path: String) -> Result<(), CommandError> {
-    std::fs::create_dir_all(&path)
-        .map_err(|e| CommandError::Message(format!("无法创建目录 {}：{}", path, e)))
+fn set_watch_path(
+    app: AppHandle,
+    state: State<'_, AccessState>,
+    path: String,
+) -> Result<(), CommandError> {
+    let path = to_path(&path);
+    lock(&state).check_library_root(&path)?;
+    watcher::watch_library(&app, &path)
 }
 
 #[tauri::command]
-fn home_dir(app: tauri::AppHandle) -> Option<String> {
+fn home_dir(app: AppHandle) -> Option<String> {
     app.path()
         .home_dir()
         .ok()
@@ -127,11 +436,13 @@ fn home_dir(app: tauri::AppHandle) -> Option<String> {
 }
 
 /// 在 Finder 中显示文件（替代 shell 插件，权限更小）
+///
+/// 不做授权校验：只是在访达里选中，不读取内容；⌘Click 图片路径可能指向库外。
 #[tauri::command]
 fn reveal_in_finder(path: String) -> Result<(), CommandError> {
     let target = to_path(&path);
     if !target.exists() {
-        return Err(CommandError::Message(format!("文件不存在：{}", path)));
+        return Err(CommandError::new("notFound", path));
     }
     #[cfg(target_os = "macos")]
     let status = Command::new("open")
@@ -149,11 +460,8 @@ fn reveal_in_finder(path: String) -> Result<(), CommandError> {
 
     match status {
         Ok(s) if s.success() => Ok(()),
-        Ok(s) => Err(CommandError::Message(format!(
-            "无法在访达中显示（退出码 {}）",
-            s
-        ))),
-        Err(e) => Err(CommandError::Message(format!("无法在访达中显示：{}", e))),
+        Ok(s) => Err(CommandError::new("revealFailed", s.to_string())),
+        Err(e) => Err(CommandError::new("revealFailed", e.to_string())),
     }
 }
 
@@ -165,9 +473,7 @@ fn open_url(url: String) -> Result<(), CommandError> {
         || lowered.starts_with("https://")
         || lowered.starts_with("mailto:"))
     {
-        return Err(CommandError::Message(
-            "仅支持打开 http/https/mailto 链接".into(),
-        ));
+        return Err(CommandError::new("unsupportedUrl", url));
     }
     let status = Command::new("open")
         .arg(&url)
@@ -176,18 +482,17 @@ fn open_url(url: String) -> Result<(), CommandError> {
         .status();
     match status {
         Ok(s) if s.success() => Ok(()),
-        Ok(s) => Err(CommandError::Message(format!(
-            "无法打开链接（退出码 {}）",
-            s
-        ))),
-        Err(e) => Err(CommandError::Message(format!("无法打开链接：{}", e))),
+        Ok(s) => Err(CommandError::new("openUrlFailed", s.to_string())),
+        Err(e) => Err(CommandError::new("openUrlFailed", e.to_string())),
     }
 }
 
 /// 调起系统打印对话框（macOS = NSPrintOperation，内含「存储为 PDF」）
 #[tauri::command]
-fn print_current(window: WebviewWindow) -> Result<(), String> {
-    window.print().map_err(|e| e.to_string())
+fn print_current(window: WebviewWindow) -> Result<(), CommandError> {
+    window
+        .print()
+        .map_err(|e| CommandError::new("printFailed", e.to_string()))
 }
 
 /// 开始拖动窗口。
@@ -221,10 +526,7 @@ pub mod testing {
     use super::*;
 
     pub fn read_document(path: &std::path::Path) -> Result<fs_ops::ReadDocumentResult, String> {
-        fs_ops::read_document(path).map_err(|e| match e {
-            fs_ops::CommandError::Message(m) => m,
-            other => format!("{:?}", other),
-        })
+        fs_ops::read_document(path).map_err(|e| e.to_string())
     }
 
     pub fn write_document(
@@ -234,10 +536,7 @@ pub mod testing {
     ) -> Result<(), String> {
         fs_ops::write_document(path, content, expected_mtime)
             .map(|_| ())
-            .map_err(|e| match e {
-                fs_ops::CommandError::Message(m) => m,
-                other => format!("{:?}", other),
-            })
+            .map_err(|e| e.to_string())
     }
 
     pub fn meta_for_testing(path: &std::path::Path) -> fs_ops::DocumentMeta {
@@ -253,6 +552,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .manage(AccessState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -262,21 +562,25 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_library,
+            choose_library,
+            change_library,
+            pick_document,
+            pick_export_target,
+            load_persisted,
+            save_persisted,
             list_documents,
             read_document,
             write_document,
             create_document,
             rename_document,
             delete_document,
-            copy_image,
             copy_image_bytes,
             search_content,
             write_text_file,
+            write_new_text_file,
             copy_assets,
-            copy_library,
             set_watch_path,
-            path_exists,
-            ensure_directory,
             home_dir,
             reveal_in_finder,
             open_url,
