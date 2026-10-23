@@ -18,6 +18,11 @@ if (!('matchMedia' in window)) {
   })
 }
 
+// 目录展开时把当前章节滚进视野
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
+
 if (!('ResizeObserver' in window)) {
   ;(window as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
     observe() {}

@@ -6,7 +6,7 @@
  *   打字时光标附近就是阅读位置，滚动浏览时跟着滚动走
  * - 结果通过回调交给 React（editorStore），本模块不碰 UI
  */
-import { syntaxTree } from '@codemirror/language'
+import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language'
 import type { EditorState, Extension } from '@codemirror/state'
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
@@ -28,8 +28,88 @@ const READING_LINE_RATIO = 0.3
 /** 编辑后重算标题的防抖 */
 const RECOMPUTE_DEBOUNCE_MS = 150
 
+/** 大文档的编辑防抖：语法树没解析完时要按行扫描全文，别每次停顿都扫 */
+const LARGE_DOC_RECOMPUTE_DEBOUNCE_MS = 600
+const LARGE_DOC_CHARS = 2 * 1024 * 1024
+
+const ATX_HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/
+const SETEXT_UNDERLINE = /^ {0,3}(=+|-+)[ \t]*$/
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/
+/** 这些行开始的不是普通段落，下面的 --- 不构成 Setext 标题 */
+const NON_PARAGRAPH = /^ {0,3}(?:[-*+][ \t]|\d{1,9}[.)][ \t]|>)/
+/** 不在段落里时，缩进 4 格的是缩进代码块 */
+const INDENTED_CODE = /^( {4}|\t)/
+
+/**
+ * 按行扫描提取标题（ATX / Setext，跳过围栏代码块）。
+ *
+ * CM6 只把语法树解析到视口附近（大文档后面的部分要滚到才解析），
+ * 目录却需要全文的标题，所以语法树没覆盖到文末时用它兜底。
+ */
+export function scanHeadings(state: EditorState): OutlineHeading[] {
+  const headings: OutlineHeading[] = []
+  let pos = 0
+  let fence: { char: string; length: number } | null = null
+  /** 当前段落第一行（Setext 标题的文字取这一行） */
+  let paragraph: { text: string; pos: number } | null = null
+
+  for (const iter = state.doc.iterLines(); !iter.next().done; ) {
+    const line = iter.value
+    const lineStart = pos
+    pos += line.length + 1
+
+    if (fence) {
+      const close = FENCE_OPEN.exec(line)
+      if (close && close[1]![0] === fence.char && close[1]!.length >= fence.length && line.trim() === close[1]) {
+        fence = null
+      }
+      continue
+    }
+
+    const open = FENCE_OPEN.exec(line)
+    if (open) {
+      fence = { char: open[1]![0]!, length: open[1]!.length }
+      paragraph = null
+      continue
+    }
+
+    if (line.trim() === '') {
+      paragraph = null
+      continue
+    }
+
+    const atx = ATX_HEADING.exec(line)
+    if (atx) {
+      const text = (atx[2] ?? '').trim()
+      if (text) headings.push({ level: atx[1]!.length, text, pos: lineStart })
+      paragraph = null
+      continue
+    }
+
+    // 段落下面的 === / --- 是 Setext 标题；没有段落时 --- 是分隔线
+    const underline = SETEXT_UNDERLINE.exec(line)
+    if (underline) {
+      const text = paragraph?.text.trim()
+      if (paragraph && text) {
+        headings.push({ level: underline[1]![0] === '=' ? 1 : 2, text, pos: paragraph.pos })
+      }
+      paragraph = null
+      continue
+    }
+
+    if (NON_PARAGRAPH.test(line)) {
+      paragraph = null
+    } else if (!paragraph && !INDENTED_CODE.test(line)) {
+      paragraph = { text: line, pos: lineStart }
+    }
+  }
+  return headings
+}
+
 /** 提取全文标题（去掉 # 标记与 Setext 下划线） */
 export function extractHeadings(state: EditorState): OutlineHeading[] {
+  if (!syntaxTreeAvailable(state, state.doc.length)) return scanHeadings(state)
+
   const headings: OutlineHeading[] = []
   const tree = syntaxTree(state)
   const cursor = tree.topNode.cursor()
@@ -96,7 +176,9 @@ export function inkOutlinePlugin(
       update(update: ViewUpdate) {
         if (update.docChanged) {
           if (this.timer) clearTimeout(this.timer)
-          this.timer = setTimeout(() => this.recompute(), RECOMPUTE_DEBOUNCE_MS)
+          const delay =
+            update.state.doc.length > LARGE_DOC_CHARS ? LARGE_DOC_RECOMPUTE_DEBOUNCE_MS : RECOMPUTE_DEBOUNCE_MS
+          this.timer = setTimeout(() => this.recompute(), delay)
         } else if (update.viewportChanged || update.geometryChanged) {
           this.onScroll()
         }

@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 
-import { activeHeadingIndex, extractHeadings } from '@/editor/outline'
+import { activeHeadingIndex, extractHeadings, scanHeadings } from '@/editor/outline'
 
 function headingsOf(doc: string) {
   const state = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })
@@ -50,5 +50,61 @@ describe('目录：当前章节', () => {
 
   it('还在第一个标题之前时没有当前章节', () => {
     expect(activeHeadingIndex(headings, 0)).toBe(-1)
+  })
+})
+
+describe('目录：语法树没解析完时按行扫描', () => {
+  const MIXED = [
+    '# 一级',
+    '',
+    '正文段落',
+    '',
+    '## 二级 ##',
+    '',
+    '```md',
+    '# 代码里的注释',
+    '```',
+    '',
+    '~~~~',
+    '## 波浪线围栏里的也不算',
+    '~~~~',
+    '',
+    'Setext 一级',
+    '===',
+    '',
+    '两行的段落',
+    '第二行',
+    '---',
+    '',
+    '---',
+    '',
+    '- 列表项',
+    '---',
+    '',
+    '    # 缩进代码块',
+    '',
+    '#没有空格不算',
+    '',
+    '#',
+    '',
+    '###### 六级',
+  ].join('\n')
+
+  it('与语法树提取的结果一致', () => {
+    expect(scanHeadings(EditorState.create({ doc: MIXED }))).toEqual(headingsOf(MIXED))
+  })
+
+  it('大文档在解析完成前也能拿到全文标题', () => {
+    const sections = Array.from(
+      { length: 2000 },
+      (_, i) => `## 第 ${i + 1} 章\n\n${'这是一段用来撑大文档的正文。'.repeat(40)}\n\n### ${i + 1}.1 小节\n\n正文\n`,
+    )
+    const state = EditorState.create({
+      doc: sections.join('\n'),
+      extensions: [markdown({ base: markdownLanguage })],
+    })
+    const headings = extractHeadings(state)
+    expect(headings).toHaveLength(4000)
+    expect(headings.at(-1)).toMatchObject({ level: 3, text: '2000.1 小节' })
   })
 })

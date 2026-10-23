@@ -3,7 +3,7 @@ import { act, fireEvent, render } from '@testing-library/react'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
-import { DocumentOutline } from '@/components/DocumentOutline'
+import { DocumentOutline, outlineWindow } from '@/components/DocumentOutline'
 import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -79,10 +79,33 @@ describe('右侧悬浮目录', () => {
     expect(nav.dataset.open).toBe('false')
   })
 
+  it('标题很多时只渲染当前章节附近的一段，当前章节在其中', () => {
+    const many = Array.from({ length: 5000 }, (_, i) => ({ level: 2, text: `节 ${i}`, pos: i * 100 }))
+    useEditorStore.setState({ outline: many, outlineActive: 4200 })
+    const { container } = renderIn(1200)
+    const items = container.querySelectorAll<HTMLElement>('.ink-outline-item')
+    expect(items.length).toBeLessThan(100)
+    const active = container.querySelector<HTMLElement>('[data-active="true"]')
+    expect(active?.title).toBe('节 4200')
+  })
+
   it('点击标题跳转到对应位置', () => {
     const jumpTo = vi.spyOn(editorBridge, 'jumpTo').mockImplementation(() => {})
     const { getByText } = renderIn(1200)
     fireEvent.click(getByText('第二节'))
     expect(jumpTo).toHaveBeenCalledWith(40)
+  })
+})
+
+describe('outlineWindow', () => {
+  it('标题不多时全部渲染', () => {
+    expect(outlineWindow(10, 3, 41)).toEqual([0, 10])
+  })
+
+  it('以当前章节为中心，贴边时不越界', () => {
+    expect(outlineWindow(1000, 500, 41)).toEqual([480, 521])
+    expect(outlineWindow(1000, 2, 41)).toEqual([0, 41])
+    expect(outlineWindow(1000, 999, 41)).toEqual([959, 1000])
+    expect(outlineWindow(1000, -1, 41)).toEqual([0, 41])
   })
 })

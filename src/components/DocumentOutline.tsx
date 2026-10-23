@@ -31,6 +31,20 @@ const OPEN_DELAY_MS = 120
 const CLOSE_DELAY_MS = 220
 /** 与 .cm-scroller 两侧对称预留的滚动条宽度一致 */
 const SCROLLBAR_GUTTERS = 16
+/**
+ * 标题很多时（大文档几千个）只渲染当前章节附近的一段：
+ * 收起时短横线列放得下的条数；展开的卡片多给一些，可在卡片里滚动
+ */
+const COLLAPSED_WINDOW = 41
+const OPEN_WINDOW = 201
+
+/** 以 active 为中心、长度不超过 size 的区间 [start, end) */
+export function outlineWindow(length: number, active: number, size: number): [number, number] {
+  if (length <= size) return [0, length]
+  const center = Math.max(0, active)
+  const start = Math.min(Math.max(0, center - Math.floor(size / 2)), length - size)
+  return [start, start + size]
+}
 
 export function DocumentOutline() {
   const t = useT()
@@ -40,9 +54,17 @@ export function DocumentOutline() {
   const contentWidth = useSettingsStore((state) => state.settings.contentWidth)
 
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const navRef = useRef<HTMLElement | null>(null)
   const [mainWidth, setMainWidth] = useState(0)
   const [open, setOpen] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 展开时把当前章节滚到卡片中间（列表比卡片高时，否则看不到当前章节）
+  useEffect(() => {
+    if (!open) return
+    const item = navRef.current?.querySelector<HTMLElement>('[data-active="true"]')
+    item?.scrollIntoView({ block: 'center' })
+  }, [open])
 
   // 跟踪主区宽度，算出正文右侧的空白
   useEffect(() => {
@@ -67,6 +89,11 @@ export function DocumentOutline() {
   const visible =
     outline.length >= OUTLINE_MIN_HEADINGS && !focusMode && margin >= OUTLINE_MIN_MARGIN_PX
   const cardWidth = Math.min(CARD_MAX_WIDTH_PX, margin - CARD_GAP_PX)
+  const [windowStart, windowEnd] = outlineWindow(
+    outline.length,
+    active,
+    open ? OPEN_WINDOW : COLLAPSED_WINDOW,
+  )
 
   const schedule = (next: boolean) => {
     if (timer.current) clearTimeout(timer.current)
@@ -77,6 +104,7 @@ export function DocumentOutline() {
     <div ref={rootRef} className="ink-outline-anchor">
       {visible ? (
         <nav
+          ref={navRef}
           className="ink-outline"
           data-open={open}
           aria-label={t('outline.label')}
@@ -84,24 +112,27 @@ export function DocumentOutline() {
           onMouseEnter={() => schedule(true)}
           onMouseLeave={() => schedule(false)}
         >
-          {outline.map((heading, index) => (
-            <button
-              key={`${heading.pos}-${index}`}
-              type="button"
-              className="ink-outline-item"
-              data-active={index === active}
-              data-level={Math.min(heading.level, 3)}
-              title={heading.text}
-              tabIndex={open ? 0 : -1}
-              onClick={() => {
-                editorBridge.jumpTo(heading.pos)
-                setOpen(false)
-              }}
-            >
-              <span className="ink-outline-dash" aria-hidden />
-              <span className="ink-outline-text">{heading.text}</span>
-            </button>
-          ))}
+          {outline.slice(windowStart, windowEnd).map((heading, offset) => {
+            const index = windowStart + offset
+            return (
+              <button
+                key={`${heading.pos}-${index}`}
+                type="button"
+                className="ink-outline-item"
+                data-active={index === active}
+                data-level={Math.min(heading.level, 3)}
+                title={heading.text}
+                tabIndex={open ? 0 : -1}
+                onClick={() => {
+                  editorBridge.jumpTo(heading.pos)
+                  setOpen(false)
+                }}
+              >
+                <span className="ink-outline-dash" aria-hidden />
+                <span className="ink-outline-text">{heading.text}</span>
+              </button>
+            )
+          })}
         </nav>
       ) : null}
     </div>
