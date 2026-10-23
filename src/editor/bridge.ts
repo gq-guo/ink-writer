@@ -11,6 +11,8 @@ export interface EditorBridge {
   focus: () => void
   /** 打开查找面板（⌘F） */
   openFind?: () => void
+  /** 跳到某个位置：光标放到该行末，该行滚到视口上部（目录跳转用） */
+  jumpTo?: (pos: number) => void
 }
 
 let bridge: EditorBridge | null = null
@@ -29,5 +31,6 @@ export const editorBridge = {
   getContent: () => bridge?.getContent() ?? '',
   focus: () => bridge?.focus(),
   openFind: () => bridge?.openFind?.(),
+  jumpTo: (pos: number) => bridge?.jumpTo?.(pos),
   isReady: () => bridge !== null,
 }

@@ -149,6 +149,7 @@ ink-writer/
 | Focus Mode | 当前块增加 accent 色竖线标识；顶部显示 Focus Mode 胶囊；隐藏元信息行；段落切换 220ms 渐变（行装饰切 class，行元素复用） |
 | 动效 | 切换深浅色时颜色过渡；侧栏展开 / 收起期间锁定正文列宽，窄窗口下不再边动画边折行（`src/lib/sidebarAnimation.ts`） |
 | Toast | 底部居中，不遮挡右上角按钮 |
+| 目录 | 右侧一列淡色短横线（每个标题一条，长短表示层级，当前章节稍亮），悬停展开为卡片、点击跳转；≥3 个标题、右侧空白 ≥200px 才显示，Focus Mode 隐藏、打字时淡出（`src/components/DocumentOutline.tsx` / `src/editor/outline.ts`） |
 | Quick Open | 列表右侧显示时间（Today / 2024-12-01） |
 | 快捷键 | 切换侧边栏改为 `⌥\`（效果图设计系统） |
 | 图标 | 新增线性图标体系（file/folder/star/clock/plus/more/feather/panel/target） |

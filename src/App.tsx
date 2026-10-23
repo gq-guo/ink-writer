@@ -8,6 +8,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { CommandPalette } from '@/components/CommandPalette'
 import { ConflictDialog } from '@/components/ConflictDialog'
+import { DocumentOutline } from '@/components/DocumentOutline'
 import { EditorHost } from '@/components/EditorHost'
 import { GlobalShortcuts } from '@/components/GlobalShortcuts'
 import { LibraryBootstrap } from '@/components/LibraryBootstrap'
@@ -175,6 +176,7 @@ export default function App() {
       <main className="relative h-full flex-1 overflow-hidden" data-sidebar={sidebarVisible}>
         <TopBar />
         <EditorHost />
+        <DocumentOutline />
         {!focusMode ? <SaveIndicator /> : null}
         <StatusBar />
       </main>

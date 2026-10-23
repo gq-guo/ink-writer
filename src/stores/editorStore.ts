@@ -2,7 +2,7 @@
  * 编辑器 store：Focus Mode、统计、外部冲突（spec §5.3）
  */
 import { create } from 'zustand'
-import type { DocumentStatistics, ExternalConflict } from '@/lib/types'
+import type { DocumentStatistics, ExternalConflict, OutlineHeading } from '@/lib/types'
 
 export interface UpdateInfo {
   version: string
@@ -23,6 +23,9 @@ interface EditorState {
   hasContent: boolean
   /** 正在连续打字：顶栏与状态栏淡出，鼠标一动就恢复（iA Writer 式降噪） */
   typing: boolean
+  /** 文档目录（标题列表）与当前阅读到的章节下标（-1 = 在第一个标题之前） */
+  outline: OutlineHeading[]
+  outlineActive: number
 
   toggleFocusMode: () => void
   setFocusMode: (on: boolean) => void
@@ -31,6 +34,7 @@ interface EditorState {
   clearConflict: () => void
   setHasContent: (hasContent: boolean) => void
   setTyping: (typing: boolean) => void
+  setOutline: (outline: OutlineHeading[], active: number) => void
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -39,6 +43,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   conflict: null,
   hasContent: false,
   typing: false,
+  outline: [],
+  outlineActive: -1,
   updateInfo: null,
 
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
@@ -49,6 +55,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setHasContent: (hasContent) => set({ hasContent }),
   // 只在值变化时 set，避免每次击键都通知订阅者
   setTyping: (typing) => set((s) => (s.typing === typing ? s : { typing })),
+  setOutline: (outline, outlineActive) => set({ outline, outlineActive }),
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
   clearUpdateInfo: () => set({ updateInfo: null }),
 }))

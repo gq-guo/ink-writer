@@ -21,7 +21,7 @@ import {
 import { history, historyKeymap } from '@codemirror/commands'
 import { EditorState, type Extension } from '@codemirror/state'
 import type { ViewUpdate } from '@codemirror/view'
-import type { DocumentStatistics } from '@/lib/types'
+import type { DocumentStatistics, OutlineHeading } from '@/lib/types'
 
 import { inkSyntaxHighlighting } from './highlight'
 import { highlightCompartment } from './performance'
@@ -35,6 +35,7 @@ import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
 import { inkLinkHandler } from './links'
 import { inkDocHeader } from './docHeader'
+import { inkOutlinePlugin } from './outline'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
 
 export interface InkExtensionOptions {
@@ -44,6 +45,8 @@ export interface InkExtensionOptions {
   onDocChanged: (update: ViewUpdate) => void
   /** 统计结果 */
   onStatistics: (statistics: DocumentStatistics) => void
+  /** 目录（标题列表 + 当前章节） */
+  onOutline: (headings: OutlineHeading[], active: number) => void
   /** 当前文档所在目录 */
   getDocDir: () => string
   /** 打开链接 */
@@ -101,6 +104,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       onRevealPath: options.onRevealPath,
     }),
     inkDocHeader,
+    inkOutlinePlugin(options.onOutline),
     placeholder('Start writing something...'),
 
     // ── 键位 ──

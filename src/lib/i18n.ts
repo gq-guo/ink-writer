@@ -212,6 +212,7 @@ const zh: Record<string, string> = {
   'searchTip.re': '正则表达式',
   'searchTip.word': '全字匹配',
   'conflict.label': '文件冲突',
+  'outline.label': '目录',
 }
 
 const en: Record<string, string> = {
@@ -397,6 +398,7 @@ const en: Record<string, string> = {
   'searchTip.re': 'Regular expression',
   'searchTip.word': 'Whole word',
   'conflict.label': 'File conflict',
+  'outline.label': 'Outline',
 }
 
 const DICTS: Record<Locale, Record<string, string>> = { 'zh-CN': zh, en }

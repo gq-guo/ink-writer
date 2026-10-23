@@ -1524,6 +1524,123 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   }
 }
 
+/* ==========================================================================
+   右侧悬浮目录（src/components/DocumentOutline.tsx）
+   平时一列淡淡的短横线，悬停展开成卡片
+   ========================================================================== */
+
+.ink-outline-anchor {
+  display: contents;
+}
+
+.ink-outline {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-height: 70vh;
+  overflow: hidden;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-family: var(--ui-font);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 200ms ease;
+}
+
+.ink-outline[data-open='true'] {
+  width: var(--outline-card-width);
+  align-items: stretch;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-overlay);
+}
+
+.ink-outline-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 12px;
+  padding: 0 4px;
+  border-radius: 7px;
+  color: var(--secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ink-outline[data-open='true'] .ink-outline-item {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.ink-outline-dash {
+  flex-shrink: 0;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+/* 层级用长短区分；短的用右边距补齐到 16px，标题文字始终左对齐 */
+.ink-outline-item[data-level='2'] .ink-outline-dash {
+  width: 12px;
+  margin-right: 4px;
+}
+
+.ink-outline-item[data-level='3'] .ink-outline-dash {
+  width: 8px;
+  margin-right: 8px;
+}
+
+.ink-outline-text {
+  display: none;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ink-outline[data-open='true'] .ink-outline-text {
+  display: block;
+}
+
+/* 当前章节：短横线与文字稍亮 */
+.ink-outline-item[data-active='true'] {
+  color: var(--foreground);
+}
+
+.ink-outline-item[data-active='true'] .ink-outline-dash {
+  opacity: 0.85;
+}
+
+.ink-outline[data-open='true'] .ink-outline-item:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.ink-outline[data-open='true'] .ink-outline-item[data-active='true'] {
+  background: color-mix(in srgb, var(--foreground) 9%, transparent);
+}
+
+/* 连续打字时与顶栏 / 状态栏一起淡出 */
+.ink-shell[data-typing='true'] .ink-outline {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 主题切换：仅在切换的那一刻临时挂上，颜色整体过渡（不影响平时的交互动效） */
 .ink-theme-transition,
 .ink-theme-transition *,

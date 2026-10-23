@@ -102,6 +102,7 @@ export function EditorHost() {
       dark: resolveTheme(useSettingsStore.getState().settings.theme) === 'dark',
       onDocChanged: handleDocChanged,
       onStatistics: (statistics) => useEditorStore.getState().setStatistics(statistics),
+      onOutline: (outline, active) => useEditorStore.getState().setOutline(outline, active),
       getDocDir: () => {
         const active = useDocumentStore.getState().activeDocument
         if (!active) return ''
@@ -170,6 +171,15 @@ export function EditorHost() {
       getContent: () => textRef.current,
       focus: () => view.focus(),
       openFind: () => openSearchPanel(view),
+      jumpTo: (pos) => {
+        const line = view.state.doc.lineAt(Math.min(Math.max(pos, 0), view.state.doc.length))
+        view.dispatch({
+          selection: { anchor: line.to },
+          // 标题停在视口上部（留出顶栏的位置），下面就是这一节的正文
+          effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 72 }),
+        })
+        view.focus()
+      },
     })
 
     return () => {

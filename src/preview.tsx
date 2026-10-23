@@ -38,6 +38,7 @@ const view = new EditorView({
       dark,
       onDocChanged: () => {},
       onStatistics: () => {},
+      onOutline: () => {},
       getDocDir: () => '',
       onOpenUrl: () => {},
       onRevealPath: () => {},
@@ -205,6 +206,24 @@ async function renderShell(): Promise<void> {
 
   // ?noh1=1：正文没有 H1，检查文件名大标题
   const noH1 = params.get('noh1') === '1'
+  // ?outline=1：多几个章节，检查右侧目录
+  const OUTLINE_SECTIONS =
+    params.get('outline') === '1'
+      ? [
+          '',
+          '## Writing Every Day',
+          '',
+          'Small, steady sessions beat rare marathons.',
+          '',
+          '### Morning Pages',
+          '',
+          'Three pages, longhand, first thing in the morning.',
+          '',
+          '## Editing Later',
+          '',
+          'Separate drafting from editing so each gets your full attention.',
+        ]
+      : []
   const CONTENT = [
     ...(noH1 ? [] : ['# Hello World', '']),
     'This is my first document in Ink.',
@@ -216,6 +235,7 @@ async function renderShell(): Promise<void> {
     '- Simple',
     '- Portable',
     '- Future proof',
+    ...OUTLINE_SECTIONS,
   ].join('\n')
 
   const [{ useDocumentStore }, { useUiStore }, { useEditorStore }, { useSettingsStore }, React, {
@@ -273,13 +293,14 @@ async function renderShell(): Promise<void> {
     },
   })
 
-  const [{ Sidebar }, { TopBar }, { EditorHost }, { StatusBar }, { Toast }] =
+  const [{ Sidebar }, { TopBar }, { EditorHost }, { StatusBar }, { Toast }, { DocumentOutline }] =
     await Promise.all([
       import('./components/Sidebar'),
       import('./components/TopBar'),
       import('./components/EditorHost'),
       import('./components/StatusBar'),
       import('./components/Toast'),
+      import('./components/DocumentOutline'),
     ])
 
   // ?toast=1：放一条示例提示，检查 toast 的位置与层级
@@ -311,6 +332,7 @@ async function renderShell(): Promise<void> {
         { className: 'relative h-full flex-1 overflow-hidden' },
         React.createElement(TopBar),
         React.createElement(EditorHost),
+        React.createElement(DocumentOutline),
         React.createElement(StatusBar),
       ),
       React.createElement(Toast),

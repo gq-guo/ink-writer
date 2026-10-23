@@ -106,3 +106,12 @@ export interface Toast {
   message: string
   kind: 'error' | 'info' | 'success'
 }
+
+/** 目录里的一个标题（右侧悬浮目录） */
+export interface OutlineHeading {
+  /** 1–6 */
+  level: number
+  text: string
+  /** 标题在文档中的起点 */
+  pos: number
+}
