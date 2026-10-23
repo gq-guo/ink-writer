@@ -4,14 +4,14 @@
  * - 顶部：App 名 + 折叠按钮
  * - 导航：All Documents / Recent / Favorites
  * - 分组：Today / Yesterday / This Week / Earlier
- * - 条目：文档图标 + displayTitle + 相对时间
+ * - 条目：单行，文档图标 + displayTitle + 收藏星标 + 右对齐的短时间
  * - 底部：+ New Document
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
-import { GROUP_ORDER, groupFor, relativeTime, type DateGroup } from '@/lib/format'
+import { GROUP_ORDER, groupFor, listTime, type DateGroup } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { useDocumentStore } from '@/stores/documentStore'
@@ -153,37 +153,33 @@ export function Sidebar() {
             setContextMenu({ x: event.clientX, y: event.clientY, document })
           }}
         >
-          <span className="ink-doc-row">
-            <span className="ink-icon ink-icon-file ink-doc-icon" aria-hidden />
-            {isRenaming ? (
-              <input
-                ref={renameInputRef}
-                className="ink-doc-title w-full bg-transparent"
-                value={renameValue}
-                onChange={(event) => setRenameValue(event.target.value)}
-                onBlur={() => commitRename(document)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    commitRename(document)
-                  } else if (event.key === 'Escape') {
-                    event.preventDefault()
-                    setRenamingPath(null)
-                  }
-                }}
-              />
-            ) : (
-              <span className="ink-doc-title">
-                {document.displayTitle || document.fileName}
-              </span>
-            )}
-            {isFavorite ? <span className="ink-icon ink-icon-star ink-fav" aria-hidden /> : null}
-          </span>
-          <span className="ink-doc-time">{relativeTime(document.mtime)}</span>
+          <span className="ink-icon ink-icon-file ink-doc-icon" aria-hidden />
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              className="ink-doc-title w-full bg-transparent"
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onBlur={() => commitRename(document)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commitRename(document)
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setRenamingPath(null)
+                }
+              }}
+            />
+          ) : (
+            <span className="ink-doc-title">{document.displayTitle || document.fileName}</span>
+          )}
+          {isFavorite ? <span className="ink-icon ink-icon-star ink-fav" aria-hidden /> : null}
+          <span className="ink-doc-time">{listTime(document.mtime, view === 'all')}</span>
         </div>
       )
     },
-    [activeDocument?.path, commitRename, favorites, openDocument, renameValue, renamingPath, t],
+    [activeDocument?.path, commitRename, favorites, openDocument, renameValue, renamingPath, t, view],
   )
 
   const hidden = !visible || focusMode

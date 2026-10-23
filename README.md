@@ -141,12 +141,14 @@ ink-writer/
 |---|---|
 | 配色 | Accent 改为 Apple 蓝 `#007AFF` / `#0A84FF`（其余令牌同 spec §17.1） |
 | 顶栏 | 文档图标 + 文件名（可点击重命名）/ 中间模式胶囊 / 右侧 搜索·Aa·更多 |
-| 侧边栏 | App 名 + 折叠按钮；All Documents / Recent / Favorites 导航；条目带文档图标与收藏星标；底部 New Document |
+| 侧边栏 | App 名 + 折叠按钮；All Documents / Recent / Favorites 导航；条目单行（图标 · 标题 · 收藏星标 · 右对齐短时间），选中态与导航项同样内缩；底部 New Document |
 | 收藏 | `AppSettings.favorites`（绝对路径数组）+ 右键/菜单切换 + 侧栏筛选 |
-| 主区 | 文档大标题 + 元信息行（时间 · 字数 · 阅读时长） |
+| 主区 | 元信息行（时间 · 字数 · 阅读时长）以块级 widget 放进编辑器：首行是 H1 时在 H1 下方，否则在正文最上方并带文件名大标题；随正文滚动、与正文同列对齐（`src/editor/docHeader.ts`） |
 | 空文档 | 「Start writing.」+「写下你的第一个想法…」引导 |
-| 状态栏 | 改为**常驻**（效果图），点击展开统计卡；新增 **句子数** |
-| Focus Mode | 当前块增加 accent 色竖线标识；顶部显示 Focus Mode 胶囊 |
+| 状态栏 | 改为**常驻**（效果图），点击展开统计卡；新增 **句子数**；连续打字时与顶栏一起淡出，鼠标移动即恢复 |
+| Focus Mode | 当前块增加 accent 色竖线标识；顶部显示 Focus Mode 胶囊；隐藏元信息行；段落切换 220ms 渐变（行装饰切 class，行元素复用） |
+| 动效 | 切换深浅色时颜色过渡；侧栏展开 / 收起期间锁定正文列宽，窄窗口下不再边动画边折行（`src/lib/sidebarAnimation.ts`） |
+| Toast | 底部居中，不遮挡右上角按钮 |
 | Quick Open | 列表右侧显示时间（Today / 2024-12-01） |
 | 快捷键 | 切换侧边栏改为 `⌥\`（效果图设计系统） |
 | 图标 | 新增线性图标体系（file/folder/star/clock/plus/more/feather/panel/target） |

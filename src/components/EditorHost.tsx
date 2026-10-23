@@ -18,6 +18,8 @@ import { highlightCompartment, isPerformanceMode, noHighlightStyle } from '@/edi
 import { inkSyntaxHighlighting } from '@/editor/highlight'
 import { setTypewriterModeEffect } from '@/editor/typewriter'
 import { centerCursorEffect } from '@/editor/centering'
+import { setDocHeaderEffect, type DocHeaderInfo } from '@/editor/docHeader'
+import { formatMetaTime, formatNumber } from '@/lib/format'
 import { registerEditorBridge } from '@/editor/bridge'
 import { errorMessage } from '@/lib/errors'
 import { useDocumentStore } from '@/stores/documentStore'
@@ -80,6 +82,10 @@ export function EditorHost() {
       textRef.current = text
     }
     useDocumentStore.getState().onEditorChange(textRef.current)
+    // 用户输入（而不是程序替换全文）时，顶栏 / 状态栏淡出
+    if (update.transactions.some((tr) => tr.isUserEvent('input') || tr.isUserEvent('delete'))) {
+      useEditorStore.getState().setTyping(true)
+    }
   }, [])
 
   // ── 文档切换：整体替换 EditorState（同时重置撤销历史）──
@@ -261,6 +267,30 @@ export function EditorHost() {
 
     if (effects.length > 0) view.dispatch({ effects })
   }, [focusMode, typewriterMode, performanceMode])
+
+  // ── 文档头（元信息行 / 文件名大标题），以块级 widget 放进编辑器 ──
+  const sidebarVisible = useUiStore((state) => state.sidebarVisible)
+  const statistics = useEditorStore((state) => state.statistics)
+  // Focus Mode 下不显示元信息（效果图 1 只保留模式胶囊）
+  const headerInfo: DocHeaderInfo | null =
+    activeDocument && sidebarVisible && !focusMode
+      ? {
+          title: activeDocument.titleFromH1
+            ? null
+            : activeDocument.displayTitle || activeDocument.fileName,
+          meta: [
+            formatMetaTime(activeDocument.mtime),
+            `${formatNumber(statistics.words)} ${t('common.wordsUnit')}`,
+            `${statistics.readingMinutes} ${t('common.minReadUnit')}`,
+          ],
+        }
+      : null
+  const headerKey = headerInfo ? JSON.stringify(headerInfo) : ''
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setDocHeaderEffect.of(headerKey ? JSON.parse(headerKey) : null) })
+    // openSeq：切换文档会整体替换 EditorState，需要重新推送
+  }, [headerKey, openSeq])
 
   const hasContent = useEditorStore((state) => state.hasContent)
 

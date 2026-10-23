@@ -9,12 +9,44 @@
  * 只计算可见区间 ±200 行，禁止全文档 decoration
  */
 import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language'
-import type { EditorState, Range } from '@codemirror/state'
+import { StateEffect, StateField, type EditorState, type Range } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 
 /** 可见区间外扩的行数（spec §18.2） */
 const PAD_LINES = 200
+
+/**
+ * 「临时空行」：刚按回车产生、光标还停在上面的空行（值为行首位置）。
+ *
+ * Markdown 里段落中间多出一个空行，就把这段拆成了两段 —— 段间距随之出现；
+ * 一打字两段又合并，间距消失，下面的行会跳一下。用户刚按回车时其实是在「换行写下一句」，
+ * 所以这一行在光标离开之前不算段落分隔、不加段间距。
+ * 光标离开或这一行有了内容，就不再是临时空行（连按两次回车 = 开始新段落，间距照常出现）。
+ */
+export const transientBlankLineField = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    const line = tr.state.doc.lineAt(tr.state.selection.main.head)
+    if (line.text.trim() !== '') return null
+
+    if (tr.docChanged && tr.isUserEvent('input')) {
+      let insertedNewline = false
+      tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+        if (inserted.toString().includes('\n')) insertedNewline = true
+      })
+      if (insertedNewline) return line.from
+    }
+
+    if (value === null) return null
+    const mapped = tr.docChanged ? tr.changes.mapPos(value) : value
+    // 光标离开了这一行
+    return tr.state.doc.lineAt(mapped).from === line.from ? line.from : null
+  },
+})
+
+/** 插件在 update 之外重建了装饰（解析延迟），用一个空事务让 CM6 重新读取 */
+const refreshStyledSourceEffect = StateEffect.define<null>()
 
 const HEADING_CLASS: Record<string, string> = {
   ATXHeading1: 'cm-md-h1',
@@ -91,9 +123,8 @@ export function buildDecorations(
 
         switch (name) {
           case 'Paragraph': {
-            // 段间距只加在段落的**最后一行**（避免换行段落内部被撑开）
-            const lastLine = state.doc.lineAt(node.to)
-            addLineClass(lastLine.number, 'cm-md-para')
+            const target = paragraphSpacingLine(state, node.to)
+            if (target !== null) addLineClass(target, 'cm-md-para')
             break
           }
           case 'ATXHeading1':
@@ -192,6 +223,19 @@ export function buildDecorations(
     })
   }
 
+  // 临时空行自成一段时（上下都不挨着段落，比如连按两次回车）：打字后它会是一个新段落，
+  // 提前按新段落给它留好下方的段间距，打字前后布局一致
+  const transient = state.field(transientBlankLineField, false) ?? null
+  if (transient !== null && visibleRanges.some((r) => transient >= r.from && transient <= r.to)) {
+    const line = state.doc.lineAt(transient)
+    const joinsAbove = line.number > 1 && isParagraphLine(state, line.number - 1)
+    const joinsBelow = line.number < state.doc.lines && isParagraphLine(state, line.number + 1)
+    if (!joinsAbove && !joinsBelow) {
+      const target = paragraphSpacingLine(state, line.to)
+      if (target !== null) addLineClass(target, 'cm-md-para')
+    }
+  }
+
   // 行装饰
   const lineDecorations: Range<Decoration>[] = []
   for (const [lineNumber, classes] of builder.lines) {
@@ -209,6 +253,44 @@ export function buildDecorations(
   }
 
   return Decoration.set([...builder.marks, ...lineDecorations], true)
+}
+
+/**
+ * 段间距放在哪一行（返回行号；null = 这一段之后暂不加间距）。
+ *
+ * 段间距不能加在段落内部的行上（换行段落会被撑开），放在段落之后：
+ * - 段落后紧跟空行（Markdown 的段落分隔）→ 加在第一个「非临时」空行上；
+ * - 后面只有临时空行（刚按回车、还没打字）→ 不加，打字后它并入本段，位置不变；
+ * - 后面没有空行（文末 / 紧挨下一个块）→ 加在段落最后一行。
+ * 若总加在段落最后一行：段末按回车后光标会停在间距下方，一打字间距挪走，光标往上跳。
+ */
+function paragraphSpacingLine(state: EditorState, paragraphEnd: number): number | null {
+  const doc = state.doc
+  const lastLine = doc.lineAt(paragraphEnd)
+  const transient = state.field(transientBlankLineField, false) ?? null
+  let sawTransient = false
+  for (let number = lastLine.number + 1; number <= doc.lines; number++) {
+    const line = doc.line(number)
+    if (line.text.trim() !== '') break
+    if (line.from === transient) {
+      sawTransient = true
+      continue
+    }
+    return number
+  }
+  return sawTransient ? null : lastLine.number
+}
+
+/** 这一行是否属于某个段落（Paragraph 节点） */
+function isParagraphLine(state: EditorState, lineNumber: number): boolean {
+  const line = state.doc.line(lineNumber)
+  if (line.text.trim() === '') return false
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from + (line.text.length - line.text.trimStart().length), 1)
+  while (node) {
+    if (node.name === 'Paragraph') return true
+    node = node.parent
+  }
+  return false
 }
 
 /** 列表项的嵌套深度 */
@@ -288,6 +370,8 @@ export const inkStyledSourcePlugin = ViewPlugin.fromClass(
             this.view.state,
             paddedVisibleRanges(this.view, PAD_LINES),
           )
+          // 不触发一次更新的话，新装饰要等下一次按键才生效 —— 间距会在打字时才突然变化
+          this.view.dispatch({ effects: refreshStyledSourceEffect.of(null) })
         }, 30)
       }
     }

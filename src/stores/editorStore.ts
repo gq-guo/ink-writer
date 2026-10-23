@@ -21,6 +21,8 @@ interface EditorState {
   /** 当前文档是否有内容（驱动「Start writing.」引导的显隐；正文权威在 CM6，
    *  activeDocument.content 只是打开时的快照，不能用它判断） */
   hasContent: boolean
+  /** 正在连续打字：顶栏与状态栏淡出，鼠标一动就恢复（iA Writer 式降噪） */
+  typing: boolean
 
   toggleFocusMode: () => void
   setFocusMode: (on: boolean) => void
@@ -28,6 +30,7 @@ interface EditorState {
   setConflict: (conflict: ExternalConflict) => void
   clearConflict: () => void
   setHasContent: (hasContent: boolean) => void
+  setTyping: (typing: boolean) => void
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -35,6 +38,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   statistics: EMPTY_STATISTICS,
   conflict: null,
   hasContent: false,
+  typing: false,
   updateInfo: null,
 
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
@@ -43,6 +47,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   setConflict: (conflict) => set({ conflict }),
   clearConflict: () => set({ conflict: null }),
   setHasContent: (hasContent) => set({ hasContent }),
+  // 只在值变化时 set，避免每次击键都通知订阅者
+  setTyping: (typing) => set((s) => (s.typing === typing ? s : { typing })),
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
   clearUpdateInfo: () => set({ updateInfo: null }),
 }))

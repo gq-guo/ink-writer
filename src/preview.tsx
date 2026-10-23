@@ -129,7 +129,7 @@ async function runSelfTest() {
     const midPos = Math.floor(view.state.doc.length / 2)
     view.dispatch({ selection: { anchor: midPos }, scrollIntoView: true })
     await frame()
-    view.dispatch({ changes: { from: midPos, insert: 'MID' } })
+    view.dispatch({ changes: { from: midPos, insert: 'MID' }, userEvent: 'input.type' })
     await frame()
     await frame()
     lines.push(measure('type-at-mid'))
@@ -203,9 +203,10 @@ async function renderShell(): Promise<void> {
     },
   ]
 
+  // ?noh1=1：正文没有 H1，检查文件名大标题
+  const noH1 = params.get('noh1') === '1'
   const CONTENT = [
-    '# Hello World',
-    '',
+    ...(noH1 ? [] : ['# Hello World', '']),
     'This is my first document in Ink.',
     '',
     'Writing is a way to think. A good writing tool helps you focus on what matters.',
@@ -251,13 +252,15 @@ async function renderShell(): Promise<void> {
       content: CONTENT,
       originalEncoding: 'utf-8',
       displayTitle: 'Hello World',
-      titleFromH1: true,
+      titleFromH1: !noH1,
       openSeq: 1,
     },
     saveState: 'idle',
     libraryPath: '/library',
   })
   useEditorStore.setState({
+    // 预置了正文：关掉空文档引导，否则「Start writing.」会叠在正文上
+    hasContent: true,
     focusMode: params.get('focus') === '1',
     statistics: {
       words: 1248,
@@ -270,14 +273,22 @@ async function renderShell(): Promise<void> {
     },
   })
 
-  const [{ Sidebar }, { TopBar }, { DocumentHeader }, { EditorHost }, { StatusBar }] =
+  const [{ Sidebar }, { TopBar }, { EditorHost }, { StatusBar }, { Toast }] =
     await Promise.all([
       import('./components/Sidebar'),
       import('./components/TopBar'),
-      import('./components/DocumentHeader'),
       import('./components/EditorHost'),
       import('./components/StatusBar'),
+      import('./components/Toast'),
     ])
+
+  // ?toast=1：放一条示例提示，检查 toast 的位置与层级
+  if (params.get('toast') === '1') {
+    // 直接写 store：pushToast 的 3s 自动消失会在无头截图前把它关掉
+    useUiStore.setState({
+      toasts: [{ id: 1, message: 't1.md 已存在，已重命名为 t1-2.md', kind: 'info' }],
+    })
+  }
 
   const container = document.createElement('div')
   container.style.height = '100%'
@@ -286,19 +297,23 @@ async function renderShell(): Promise<void> {
   host.innerHTML = ''
   host.appendChild(container)
 
+  const { installSidebarWidthFreeze } = await import('./lib/sidebarAnimation')
+  installSidebarWidthFreeze()
+
   createRoot(container).render(
     React.createElement(
       'div',
-      { className: 'ink-shell' },
+      // ?typing=1：模拟正在打字（顶栏 / 状态栏淡出）
+      { className: 'ink-shell', 'data-typing': params.get('typing') === '1' },
       React.createElement(Sidebar),
       React.createElement(
         'main',
         { className: 'relative h-full flex-1 overflow-hidden' },
         React.createElement(TopBar),
-        React.createElement(DocumentHeader),
         React.createElement(EditorHost),
         React.createElement(StatusBar),
       ),
+      React.createElement(Toast),
     ),
   )
 }

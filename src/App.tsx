@@ -7,7 +7,6 @@ import { useEffect, useRef } from 'react'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { CommandPalette } from '@/components/CommandPalette'
-import { DocumentHeader } from '@/components/DocumentHeader'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { EditorHost } from '@/components/EditorHost'
 import { GlobalShortcuts } from '@/components/GlobalShortcuts'
@@ -21,6 +20,7 @@ import { TopBar } from '@/components/TopBar'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { scheduleUpdateCheck } from '@/lib/updater'
 import { WindowDragRegion } from '@/components/WindowDragRegion'
+import { installSidebarWidthFreeze } from '@/lib/sidebarAnimation'
 import { readPersisted, writePersisted } from '@/lib/persist'
 import { errorMessage } from '@/lib/errors'
 import { t } from '@/lib/i18n'
@@ -33,6 +33,7 @@ export default function App() {
   const hydrated = useSettingsStore((state) => state.hydrated)
   const libraryPath = useSettingsStore((state) => state.settings.libraryPath)
   const focusMode = useEditorStore((state) => state.focusMode)
+  const typing = useEditorStore((state) => state.typing)
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   const quickOpenVisible = useUiStore((state) => state.quickOpenVisible)
   const paletteVisible = useUiStore((state) => state.paletteVisible)
@@ -104,6 +105,28 @@ export default function App() {
     }
   }, [])
 
+  // ── 打字时顶栏 / 状态栏淡出；鼠标真正移动（> 4px，过滤触控板抖动）后恢复 ──
+  useEffect(() => {
+    let last: { x: number; y: number } | null = null
+    const onMove = (event: MouseEvent) => {
+      if (!useEditorStore.getState().typing) {
+        last = null
+        return
+      }
+      if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) > 4) {
+        useEditorStore.getState().setTyping(false)
+        last = null
+        return
+      }
+      last ??= { x: event.clientX, y: event.clientY }
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
+  // ── 侧栏展开 / 收起动画期间锁定正文列宽 ──
+  useEffect(() => installSidebarWidthFreeze(), [])
+
   // ── 失焦 / 退出前落盘 ──
   useEffect(() => {
     const flush = () => void useDocumentStore.getState().flushSave()
@@ -145,13 +168,12 @@ export default function App() {
   }
 
   return (
-    <div className="ink-shell">
+    <div className="ink-shell" data-typing={typing}>
       {/* 窗口拖拽条：红绿灯内嵌时 webview 覆盖了原生标题栏 */}
       <WindowDragRegion className="ink-window-drag" />
       <Sidebar />
       <main className="relative h-full flex-1 overflow-hidden" data-sidebar={sidebarVisible}>
         <TopBar />
-        <DocumentHeader />
         <EditorHost />
         {!focusMode ? <SaveIndicator /> : null}
         <StatusBar />

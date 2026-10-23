@@ -1,10 +1,12 @@
-import { EditorState } from '@codemirror/state'
+import { EditorState, type Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   centerCursorEffect,
+  inkComfortScrollMargins,
   inkCursorCenteringPlugin,
+  inkTypingCenteringExtender,
   isCenteringEnabled,
 } from '@/editor/centering'
 import { focusModeField, setFocusModeEffect } from '@/editor/focusMode'
@@ -17,11 +19,21 @@ function nextFrame(): Promise<void> {
   )
 }
 
+/** 事务里是否带了「把光标滚到垂直中心」的效果（EditorView.scrollIntoView(…, { y: 'center' })） */
+function centersCursor(tr: Transaction): boolean {
+  return tr.effects.some((effect) => (effect.value as { y?: unknown } | null)?.y === 'center')
+}
+
 function makeView() {
   const view = new EditorView({
     state: EditorState.create({
       doc: 'hello world',
-      extensions: [focusModeField, typewriterModeField, inkCursorCenteringPlugin],
+      extensions: [
+        focusModeField,
+        typewriterModeField,
+        inkCursorCenteringPlugin,
+        inkTypingCenteringExtender,
+      ],
     }),
     parent: document.body,
   })
@@ -61,57 +73,47 @@ describe('光标居中（Focus Mode / Typewriter Mode 共用）', () => {
     view.destroy()
   })
 
-  it('打字时会在下一帧派发滚动（把当前行拉到视口中心）', async () => {
+  it('打字时居中滚动随这次输入的事务一起生效（不推迟到后面的帧，回车不会先闪一下）', () => {
     const view = makeView()
     view.dispatch({ effects: setFocusModeEffect.of(true) })
 
-    const dispatch = vi.spyOn(view, 'dispatch')
-    const before = dispatch.mock.calls.length
-    view.dispatch({ changes: { from: 0, insert: 'x' } })
-    await nextFrame()
-
-    // 除了测试自己那次，插件还额外派发了一次滚动
-    expect(dispatch.mock.calls.length).toBeGreaterThan(before + 1)
+    const tr = view.state.update({ changes: { from: 0, insert: '\n' }, userEvent: 'input' })
+    expect(centersCursor(tr)).toBe(true)
     view.destroy()
   })
 
-  it('插件不会因为在 update 里 dispatch 而崩溃停用', async () => {
+  it('连续打字每次都会居中，且插件不会崩溃停用', () => {
     const errors: unknown[][] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => {
       errors.push(args)
     })
-
     const view = makeView()
     view.dispatch({ effects: setFocusModeEffect.of(true) })
 
-    const dispatch = vi.spyOn(view, 'dispatch')
-    const base = dispatch.mock.calls.length
+    const first = view.state.update({ changes: { from: 0, insert: 'x' }, userEvent: 'input.type' })
+    expect(centersCursor(first)).toBe(true)
+    view.dispatch(first)
+    const second = view.state.update({ changes: { from: 0, insert: 'y' }, userEvent: 'input.type' })
+    expect(centersCursor(second)).toBe(true)
+    view.dispatch(second)
 
-    // 连续打两次字：插件若在第一次被 CM6 停用，第二次就不会再滚动
-    view.dispatch({ changes: { from: 0, insert: 'x' } })
-    await nextFrame()
-    const afterFirst = dispatch.mock.calls.length - base
-
-    view.dispatch({ changes: { from: 0, insert: 'y' } })
-    await nextFrame()
-    const afterSecond = dispatch.mock.calls.length - base - afterFirst
-
-    expect(afterFirst).toBeGreaterThan(0)
-    expect(afterSecond).toBeGreaterThan(0)
-
-    // CM6 捕获插件异常后会打印 "CodeMirror plugin crashed" 并停用插件
     const crashes = errors.filter((args) => String(args[0]).includes('CodeMirror plugin crashed'))
     expect(crashes).toHaveLength(0)
     view.destroy()
   })
 
-  it('模式关闭时打字不会派发滚动', async () => {
+  it('模式关闭时打字不居中', () => {
     const view = makeView()
-    const dispatch = vi.spyOn(view, 'dispatch')
-    const before = dispatch.mock.calls.length
-    view.dispatch({ changes: { from: 0, insert: 'x' } })
-    await nextFrame()
-    expect(dispatch.mock.calls.length).toBe(before + 1)
+    const tr = view.state.update({ changes: { from: 0, insert: 'x' }, userEvent: 'input.type' })
+    expect(centersCursor(tr)).toBe(false)
+    view.destroy()
+  })
+
+  it('程序改文档（非用户输入）不居中', () => {
+    const view = makeView()
+    view.dispatch({ effects: setFocusModeEffect.of(true) })
+    const tr = view.state.update({ changes: { from: 0, insert: 'x' } })
+    expect(centersCursor(tr)).toBe(false)
     view.destroy()
   })
 
@@ -122,23 +124,22 @@ describe('光标居中（Focus Mode / Typewriter Mode 共用）', () => {
     const view = makeView()
     view.dispatch({ effects: setFocusModeEffect.of(true) })
 
+    const tr = view.state.update({ selection: { anchor: 3 }, userEvent: 'select' })
+    expect(centersCursor(tr)).toBe(false)
+
     const dispatch = vi.spyOn(view, 'dispatch')
     const before = dispatch.mock.calls.length
-    view.dispatch({ selection: { anchor: 3 } })
+    view.dispatch(tr)
     await nextFrame()
     expect(dispatch.mock.calls.length).toBe(before + 1)
     view.destroy()
   })
 
-  it('拖拽选区时不触发居中', async () => {
+  it('拖拽选区时不触发居中', () => {
     const view = makeView()
     view.dispatch({ effects: setFocusModeEffect.of(true) })
-
-    const dispatch = vi.spyOn(view, 'dispatch')
-    const before = dispatch.mock.calls.length
-    view.dispatch({ selection: { anchor: 0, head: 5 } })
-    await nextFrame()
-    expect(dispatch.mock.calls.length).toBe(before + 1)
+    const tr = view.state.update({ selection: { anchor: 0, head: 5 }, userEvent: 'select.pointer' })
+    expect(centersCursor(tr)).toBe(false)
     view.destroy()
   })
 
@@ -152,6 +153,48 @@ describe('光标居中（Focus Mode / Typewriter Mode 共用）', () => {
 
     expect(scrollTo).toHaveBeenCalled()
     expect(scrollTo.mock.calls[0]![0]).toMatchObject({ behavior: 'smooth' })
+    view.destroy()
+  })
+})
+
+describe('普通模式底部舒适区', () => {
+  function marginsOf(view: EditorView) {
+    return view.state
+      .facet(EditorView.scrollMargins)
+      .map((fn) => fn(view))
+      .filter((margins) => margins !== null)
+  }
+
+  function viewWithHeight(height: number) {
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: 'hello',
+        extensions: [focusModeField, typewriterModeField, inkComfortScrollMargins],
+      }),
+      parent: document.body,
+    })
+    Object.defineProperty(view.scrollDOM, 'clientHeight', { value: height, configurable: true })
+    return view
+  }
+
+  it('写到底部时光标与底边保持约 1/4 视口（不贴底、不压到状态栏）', () => {
+    const view = viewWithHeight(800)
+    expect(marginsOf(view)).toEqual([{ bottom: 200 }])
+    view.destroy()
+  })
+
+  it('矮窗口也至少留出一截，高出底部状态栏', () => {
+    const view = viewWithHeight(300)
+    expect(marginsOf(view)).toEqual([{ bottom: 96 }])
+    view.destroy()
+  })
+
+  it('Focus / Typewriter 模式不加边距（光标钉在中线，边距会把中线挤偏）', () => {
+    const view = viewWithHeight(800)
+    view.dispatch({ effects: setFocusModeEffect.of(true) })
+    expect(marginsOf(view)).toEqual([])
+    view.dispatch({ effects: [setFocusModeEffect.of(false), setTypewriterModeEffect.of(true)] })
+    expect(marginsOf(view)).toEqual([])
     view.destroy()
   })
 })

@@ -25,15 +25,16 @@ import type { DocumentStatistics } from '@/lib/types'
 
 import { inkSyntaxHighlighting } from './highlight'
 import { highlightCompartment } from './performance'
-import { inkStyledSourcePlugin } from './styledSource'
+import { inkStyledSourcePlugin, transientBlankLineField } from './styledSource'
 import { focusModeField, inkFocusModePlugin } from './focusMode'
 import { typewriterModeField } from './typewriter'
-import { inkCursorCenteringPlugin } from './centering'
+import { inkComfortScrollMargins, inkCursorCenteringPlugin, inkTypingCenteringExtender } from './centering'
 import { inkStatisticsPlugin } from './statistics'
 import { makeSearchPhrases, searchPhrasesCompartment } from './searchPhrases'
 import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
 import { inkLinkHandler } from './links'
+import { inkDocHeader } from './docHeader'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
 
 export interface InkExtensionOptions {
@@ -81,11 +82,14 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
     highlightSelectionMatches(),
 
     // ── Ink 自研插件 ──
+    transientBlankLineField,
     inkStyledSourcePlugin,
     focusModeField,
     inkFocusModePlugin,
     typewriterModeField,
     inkCursorCenteringPlugin,
+    inkTypingCenteringExtender,
+    inkComfortScrollMargins,
     inkStatisticsPlugin(options.onStatistics),
     inkImageHandler({
       getDocDir: options.getDocDir,
@@ -96,6 +100,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       onOpenUrl: options.onOpenUrl,
       onRevealPath: options.onRevealPath,
     }),
+    inkDocHeader,
     placeholder('Start writing something...'),
 
     // ── 键位 ──

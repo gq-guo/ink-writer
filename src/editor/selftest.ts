@@ -96,7 +96,7 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
       view.focus()
       await nextFrames(1)
       const head = view.state.selection.main.head
-      view.dispatch({ changes: { from: head, insert: text } })
+      view.dispatch({ changes: { from: head, insert: text }, userEvent: 'input.type' })
       await nextFrames(3)
       push(`type-${text}: ${measure(view)}`)
     }
@@ -107,7 +107,7 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
     await nextFrames(2)
     view.focus()
     await nextFrames(1)
-    view.dispatch({ changes: { from: mid, insert: 'X' } })
+    view.dispatch({ changes: { from: mid, insert: 'X' }, userEvent: 'input.type' })
     await nextFrames(3)
     push(`type-mid: ${measure(view)}`)
 

@@ -52,17 +52,22 @@ describe('Sidebar（spec W2）', () => {
     expect(screen.getByText('Earlier')).toBeInTheDocument()
   })
 
-  it('相对时间跟随界面语言（英文界面不显示「分钟前」）', () => {
-    syncLocale('en')
+  it('条目单行显示 displayTitle 与右侧短时间（分组视图下今天显示时刻）', () => {
     render(<Sidebar />)
-    expect(screen.getByText('just now')).toBeInTheDocument()
+    const item = screen.getByText('今天的文档').closest('.ink-doc-item')!
+    expect(item.querySelector('.ink-doc-time')?.textContent).toMatch(/^\d{2}:\d{2}$/)
   })
 
-  it('条目显示 displayTitle 与相对时间', () => {
+  it('Recent 视图里昨天的文档按界面语言显示「昨天 / yesterday」', () => {
+    useUiStore.setState({ sidebarView: 'recent' })
+    syncLocale('en')
+    const { unmount } = render(<Sidebar />)
+    expect(screen.getByText('yesterday')).toBeInTheDocument()
+    unmount()
     syncLocale('zh-CN')
     render(<Sidebar />)
-    expect(screen.getByText('今天的文档')).toBeInTheDocument()
-    expect(screen.getByText('刚刚')).toBeInTheDocument()
+    expect(screen.getByText('昨天')).toBeInTheDocument()
+    useUiStore.setState({ sidebarView: 'all' })
   })
 
   it('点击条目打开文档', () => {

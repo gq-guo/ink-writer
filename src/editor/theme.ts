@@ -39,6 +39,7 @@ export const inkThemeSpec = {
   '.cm-scroller': {
     overflowX: 'hidden',
     fontFamily: 'var(--writing-font)',
+    scrollbarGutter: 'stable both-edges',
   },
   '.cm-line': {
     padding: '0',
@@ -102,7 +103,7 @@ export const inkThemeSpec = {
     borderRadius: '4px',
     padding: '0.1em 0.3em',
   },
-  // 段间距：只加在段落的最后一行（换行段落内部不会被撑开）
+  // 段间距：加在段落后的分隔空行上（没有空行时加在段落最后一行），见 styledSource 的 Paragraph
   '.cm-md-para': {
     paddingBottom: '0.9em',
   },

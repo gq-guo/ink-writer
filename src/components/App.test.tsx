@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }))
 
@@ -192,6 +192,33 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
       useDocumentStore.getState().onEditorChange('你好')
     })
     expect(container.querySelector('.ink-empty-guide')).toBeNull()
+  })
+
+  it('打字时外壳标记 data-typing，鼠标真正移动后恢复（微小抖动不算）', async () => {
+    window.localStorage.setItem('ink:settings', JSON.stringify({ libraryPath: '/tmp/ink-typing' }))
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'list_documents') return []
+      if (command === 'create_document') {
+        return { path: '/tmp/ink-typing/Untitled.md', fileName: 'Untitled.md', dirPrefix: '', mtime: 1, size: 0, displayTitle: 'Untitled' }
+      }
+      if (command === 'read_document') {
+        return { content: '', encoding: 'utf-8', mtime: 1, size: 0, lineEnding: 'lf' }
+      }
+      return undefined
+    })
+    const { container } = render(<App />)
+    await waitFor(() => expect(container.querySelector('.ink-shell')).toBeInTheDocument())
+    const shell = container.querySelector('.ink-shell') as HTMLElement
+
+    act(() => useEditorStore.getState().setTyping(true))
+    expect(shell.dataset.typing).toBe('true')
+
+    fireEvent.mouseMove(window, { clientX: 100, clientY: 100 })
+    fireEvent.mouseMove(window, { clientX: 102, clientY: 101 })
+    expect(shell.dataset.typing).toBe('true')
+
+    fireEvent.mouseMove(window, { clientX: 140, clientY: 120 })
+    expect(shell.dataset.typing).toBe('false')
   })
 
   it('已有库目录时直接进入编辑器并打开最近文档', async () => {

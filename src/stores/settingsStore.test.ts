@@ -64,3 +64,56 @@ describe('settingsStore.hydrate 的文档库来源', () => {
     )
   })
 })
+
+describe('主题切换', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.classList.remove('ink-theme-transition')
+  })
+
+  it('用户切换时临时挂上过渡 class，结束后移除；启动时不挂', async () => {
+    vi.useFakeTimers()
+    const { applyThemeToDocument } = await import('@/stores/settingsStore')
+    const root = document.documentElement
+
+    applyThemeToDocument('light')
+    expect(root.classList.contains('ink-theme-transition')).toBe(false)
+
+    applyThemeToDocument('dark', { animate: true })
+    expect(root.dataset.theme).toBe('dark')
+    expect(root.classList.contains('ink-theme-transition')).toBe(true)
+
+    vi.advanceTimersByTime(400)
+    expect(root.classList.contains('ink-theme-transition')).toBe(false)
+  })
+
+  it('跟随系统时监听 macOS 外观变化，更新 <html data-theme>', async () => {
+    let dark = false
+    let onChange: (() => void) | null = null
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      get matches() {
+        return dark
+      },
+      media: query,
+      addEventListener: (_: string, handler: () => void) => {
+        onChange = handler
+      },
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      const { settingsStore } = await loadStores()
+      settingsStore.setState((s) => ({ settings: { ...s.settings, theme: 'system' } }))
+      const { applyThemeToDocument } = await import('@/stores/settingsStore')
+      applyThemeToDocument('system')
+      expect(document.documentElement.dataset.theme).toBe('light')
+
+      dark = true
+      onChange!()
+      expect(document.documentElement.dataset.theme).toBe('dark')
+    } finally {
+      window.matchMedia = original
+    }
+  })
+})

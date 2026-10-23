@@ -8,6 +8,9 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() =
 import { EditorHost } from '@/components/EditorHost'
 import { syncLocale } from '@/lib/i18n'
 import { useDocumentStore } from '@/stores/documentStore'
+import { useEditorStore } from '@/stores/editorStore'
+import { useUiStore } from '@/stores/uiStore'
+import { editorBridge } from '@/editor/bridge'
 
 const DOC = {
   path: '/library/Note.md',
@@ -43,5 +46,45 @@ describe('EditorHost 切换语言', () => {
     })
 
     expect(view!.state.doc.toString()).toBe('hello world')
+  })
+})
+
+async function mountEditor(): Promise<{ view: EditorView; container: HTMLElement }> {
+  useDocumentStore.setState({ activeDocument: DOC, saveState: 'idle' })
+  const { container } = render(<EditorHost />)
+  let view: EditorView | null = null
+  await waitFor(() => {
+    const dom = container.querySelector('.cm-editor') as HTMLElement | null
+    view = dom ? EditorView.findFromDOM(dom) : null
+    expect(view).not.toBeNull()
+  })
+  return { view: view!, container }
+}
+
+describe('EditorHost 打字降噪', () => {
+  it('用户输入时标记 typing（顶栏 / 状态栏淡出），程序替换全文不算', async () => {
+    useEditorStore.setState({ typing: false })
+    const { view } = await mountEditor()
+
+    act(() => editorBridge.setContent('replaced by program'))
+    expect(useEditorStore.getState().typing).toBe(false)
+
+    act(() => {
+      view.dispatch({ changes: { from: 0, insert: 'x' }, userEvent: 'input.type' })
+    })
+    expect(useEditorStore.getState().typing).toBe(true)
+  })
+})
+
+describe('EditorHost 文档头', () => {
+  it('侧栏展开时显示元信息，Focus Mode 下隐藏', async () => {
+    useUiStore.setState({ sidebarVisible: true })
+    useEditorStore.setState({ focusMode: false })
+    const { container } = await mountEditor()
+    await waitFor(() => expect(container.querySelector('.ink-doc-meta')).not.toBeNull())
+
+    act(() => useEditorStore.setState({ focusMode: true }))
+    await waitFor(() => expect(container.querySelector('.ink-doc-header')).toBeNull())
+    act(() => useEditorStore.setState({ focusMode: false }))
   })
 })

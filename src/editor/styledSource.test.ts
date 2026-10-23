@@ -149,6 +149,62 @@ describe('Focus Mode（spec §9）', () => {
     expect(active.length).toBeGreaterThan(0)
   })
 
+  it('用行装饰：多行块的每一行都带 class（行元素复用，opacity 过渡才生效）', () => {
+    const doc = '第一行\n第二行\n\n另一段'
+    const state = stateWith(doc, true)
+    const withSelection = state.update({
+      selection: { anchor: doc.length },
+      effects: setFocusModeEffect.of(true),
+    }).state
+    const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
+    const dims = dimRanges(decorations)
+    // 第一段两行各一个行装饰（点装饰，from === to，落在行首）
+    expect(dims).toEqual([
+      { from: 0, to: 0 },
+      { from: 4, to: 4 },
+    ])
+  })
+
+  it('段落末尾换行、还没输入时：竖线延续到新空行，上一段仍是当前块', () => {
+    // 光标在第 3 行（kai1 后刚按回车得到的空行）
+    const doc = 'meiyou\nkai1\n\n\nf'
+    const state = stateWith(doc, true)
+    const withSelection = state.update({
+      selection: { anchor: 'meiyou\nkai1\n'.length },
+      effects: setFocusModeEffect.of(true),
+    }).state
+    const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
+    const lineOf = (pos: number) => withSelection.doc.lineAt(pos).number
+    expect(activeLines(decorations).map(lineOf)).toEqual([1, 2, 3])
+    // 隔着空行的下一段照常变淡
+    expect(dimRanges(decorations).map((range) => lineOf(range.from))).toEqual([5])
+  })
+
+  it('连按两次回车（隔了空行）：只标当前空行，上一段变淡', () => {
+    const doc = 'meiyou\nkai1\n\n'
+    const state = stateWith(doc, true)
+    const withSelection = state.update({
+      selection: { anchor: doc.length },
+      effects: setFocusModeEffect.of(true),
+    }).state
+    const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
+    const lineOf = (pos: number) => withSelection.doc.lineAt(pos).number
+    expect(activeLines(decorations).map(lineOf)).toEqual([4])
+    expect(dimRanges(decorations).map((range) => lineOf(range.from))).toEqual([1, 2])
+  })
+
+  it('空行上下都紧挨着文字时：上下两块都算当前块（打字后它们会合成一段）', () => {
+    const doc = 'kai1\n\nf'
+    const state = stateWith(doc, true)
+    const withSelection = state.update({
+      selection: { anchor: 'kai1\n'.length },
+      effects: setFocusModeEffect.of(true),
+    }).state
+    const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
+    expect(dimRanges(decorations)).toHaveLength(0)
+    expect(activeLines(decorations)).toHaveLength(3)
+  })
+
   it('当前块不被弱化', () => {
     const doc = '第一段\n\n第二段'
     const state = stateWith(doc, true)
