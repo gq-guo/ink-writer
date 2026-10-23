@@ -78,7 +78,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          out=dist && mkdir -p "$out"
+          # 不能用 dist/：那是 Vite 的前端产物目录（index.html + assets/），
+          # shasum * 会撞上 assets 目录报错，前端文件也会被当成 Release 附件上传
+          out=release-assets && mkdir -p "$out"
           app=src-tauri/target/universal-apple-darwin/release/bundle/macos/Ink.app
           scripts/make-dmg.sh "$app" "$out/Ink-${GITHUB_REF_NAME}-macos-universal.dmg"
           ditto -c -k --keepParent "$app" "$out/Ink-${GITHUB_REF_NAME}-macos-universal.app.zip"
@@ -104,7 +106,7 @@ jobs:
         with:
           name: Ink ${{ github.ref_name }}
           draft: true
-          files: dist/*
+          files: release-assets/*
           generate_release_notes: true
           body: |
             ## Install (macOS, Intel & Apple Silicon)
