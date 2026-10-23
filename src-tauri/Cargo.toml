@@ -1,6 +1,6 @@
 [package]
 name = "ink-writer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Ink — 极简 Markdown 写作软件"
 authors = ["Ink"]
 license = "MIT"
