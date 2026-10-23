@@ -14,6 +14,7 @@ interface UiState {
   sidebarView: SidebarView
   quickOpenVisible: boolean
   paletteVisible: boolean
+  settingsVisible: boolean
   conflictVisible: boolean
   recentCommands: string[]
   toasts: Toast[]
@@ -29,6 +30,8 @@ interface UiState {
   hideQuickOpen: () => void
   showPalette: () => void
   hidePalette: () => void
+  showSettings: () => void
+  hideSettings: () => void
   closeOverlays: () => void
   pushToast: (toast: Omit<Toast, 'id'>) => void
   dismissToast: (id: number) => void
@@ -55,6 +58,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarView: 'all',
   quickOpenVisible: false,
   paletteVisible: false,
+  settingsVisible: false,
   conflictVisible: false,
   recentCommands: [],
   toasts: [],
@@ -67,11 +71,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   setSidebarWidth: (width) =>
     set({ sidebarWidth: Math.min(SIDEBAR_WIDTH_RANGE.max, Math.max(SIDEBAR_WIDTH_RANGE.min, width)) }),
 
-  showQuickOpen: () => set({ quickOpenVisible: true, paletteVisible: false }),
+  showQuickOpen: () => set({ quickOpenVisible: true, paletteVisible: false, settingsVisible: false }),
   hideQuickOpen: () => set({ quickOpenVisible: false }),
-  showPalette: () => set({ paletteVisible: true, quickOpenVisible: false }),
+  showPalette: () => set({ paletteVisible: true, quickOpenVisible: false, settingsVisible: false }),
   hidePalette: () => set({ paletteVisible: false }),
-  closeOverlays: () => set({ quickOpenVisible: false, paletteVisible: false }),
+  showSettings: () => set({ settingsVisible: true, quickOpenVisible: false, paletteVisible: false }),
+  hideSettings: () => set({ settingsVisible: false }),
+  closeOverlays: () => set({ quickOpenVisible: false, paletteVisible: false, settingsVisible: false }),
 
   pushToast: (toast) => {
     const id = ++toastId

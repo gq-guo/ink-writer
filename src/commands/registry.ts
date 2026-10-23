@@ -82,6 +82,13 @@ export function buildCommands(): Command[] {
     },
     {
       group: 'view',
+      id: 'app.settings',
+      title: t('cmd.app.settings'),
+      shortcut: '⌘,',
+      run: () => useUiStore.getState().showSettings(),
+    },
+    {
+      group: 'view',
       id: 'app.sidebar',
       title: t('cmd.app.sidebar'),
       shortcut: '⌥\\',

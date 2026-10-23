@@ -14,6 +14,7 @@ import { GlobalShortcuts } from '@/components/GlobalShortcuts'
 import { LibraryBootstrap } from '@/components/LibraryBootstrap'
 import { QuickOpen } from '@/components/QuickOpen'
 import { SaveIndicator } from '@/components/SaveIndicator'
+import { SettingsPanel } from '@/components/SettingsPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { StatusBar } from '@/components/StatusBar'
 import { Toast } from '@/components/Toast'
@@ -22,6 +23,8 @@ import { UpdateDialog } from '@/components/UpdateDialog'
 import { scheduleUpdateCheck } from '@/lib/updater'
 import { WindowDragRegion } from '@/components/WindowDragRegion'
 import { installSidebarWidthFreeze } from '@/lib/sidebarAnimation'
+import { installAppMenu } from '@/lib/appMenu'
+import { openRequestedFiles } from '@/lib/openRequests'
 import { readPersisted, writePersisted } from '@/lib/persist'
 import { errorMessage } from '@/lib/errors'
 import { t } from '@/lib/i18n'
@@ -38,7 +41,32 @@ export default function App() {
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   const quickOpenVisible = useUiStore((state) => state.quickOpenVisible)
   const paletteVisible = useUiStore((state) => state.paletteVisible)
+  const settingsVisible = useUiStore((state) => state.settingsVisible)
   const bootstrappedRef = useRef(false)
+  /** 库扫描完成后才处理 Finder 打开请求（之前到达的留在 Rust 队列里） */
+  const openRequestsReadyRef = useRef(false)
+
+  // ── 原生菜单栏（语言切换时自动重建）──
+  useEffect(() => installAppMenu(), [])
+
+  // ── Finder 打开文档（App 已在运行时）──
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined
+    let disposed = false
+    void listen('ink://open-requested', () => {
+      if (!openRequestsReadyRef.current) return
+      void openRequestedFiles().catch((error: unknown) => {
+        useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+      })
+    }).then((fn) => {
+      if (disposed) fn()
+      else unlisten = fn
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
 
   // ── 启动：读取设置 ──
   useEffect(() => {
@@ -66,7 +94,11 @@ export default function App() {
       try {
         const store = useDocumentStore.getState()
         await store.bootstrapLibrary(libraryPath)
+        openRequestsReadyRef.current = true
+        // 从 Finder 双击 .md 启动：打开那个文件，而不是库里的第一篇
+        const openedRequested = await openRequestedFiles()
         const state = useDocumentStore.getState()
+        if (openedRequested || state.activeDocument) return
         if (state.documents.length === 0) {
           await state.createDocument()
         } else {
@@ -183,6 +215,7 @@ export default function App() {
 
       {quickOpenVisible ? <QuickOpen /> : null}
       {paletteVisible ? <CommandPalette /> : null}
+      {settingsVisible ? <SettingsPanel /> : null}
       <ConflictDialog />
       <UpdateDialog />
       <Toast />

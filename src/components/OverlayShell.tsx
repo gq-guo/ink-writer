@@ -12,6 +12,8 @@ interface OverlayShellProps {
   variant?: 'panel' | 'dialog'
   /** 无障碍标签 */
   label?: string
+  /** 额外的 class（个别对话框微调尺寸） */
+  className?: string
 }
 
 export function OverlayShell({
@@ -20,6 +22,7 @@ export function OverlayShell({
   width,
   variant = 'panel',
   label,
+  className,
 }: OverlayShellProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -60,7 +63,7 @@ export function OverlayShell({
     >
       <div
         ref={containerRef}
-        className={variant === 'dialog' ? 'ink-dialog' : 'ink-overlay'}
+        className={[variant === 'dialog' ? 'ink-dialog' : 'ink-overlay', className].filter(Boolean).join(' ')}
         style={width ? { width, maxWidth: 'calc(100vw - 48px)' } : undefined}
         role="dialog"
         aria-modal="true"

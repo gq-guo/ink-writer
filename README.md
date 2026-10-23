@@ -218,7 +218,18 @@ type-mid:  offset=0.3px    scrollTop=4760   ← 打字后精确居中，偏差 0
 move-only: scrollTopDelta=0                ← 只移动光标，视图不被拽动 ✓
 ```
 
-### 9. 统计口径（spec §16 / R4）
+### 9. 从 Finder 打开文档
+
+`tauri.conf.json` 的 `fileAssociations` 声明了 `.md / .markdown / .mdown`（UTI `net.daringfireball.markdown`），
+打包后 Ink 出现在「打开方式」里，也可以把文件拖到 Dock 图标上。
+
+- macOS 通过 `RunEvent::Opened` 交来文件 URL，Rust 授权该文件（与 ⌘O 同等：文件本身 + 同级目录）后
+  放进队列，并发 `ink://open-requested` 事件（`src-tauri/src/open_requests.rs`）
+- 冷启动时这个事件会早于前端就绪：前端在库扫描完成后主动调 `take_open_requests` 取队列，
+  取到文件就打开它，而不是库里的第一篇（`src/lib/openRequests.ts`）
+- 文件关联只在打包后的 `.app` 里生效，`pnpm tauri dev` 下测不到
+
+### 10. 统计口径（spec §16 / R4）
 
 CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 分钟，向上取整，最小 1。
 >2MB 文档走 `requestIdleCallback` 按 512KB 分片计算，分片期间保持上次结果。
@@ -234,7 +245,8 @@ CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 
 | 3 | §7.4 capabilities 含 `fs:allow-read-write-recursive` | 文件 IO 全部走 Rust 命令，capability 只保留 `core/window-state/updater`；每个文件命令按 `src-tauri/src/access.rs` 校验路径 | 最小权限原则：只放行文档库内的路径，以及用户在 Rust 弹出的对话框里亲手选过的文件（⌘O 打开 / 导出目标）。选库、打开、导出、换库的对话框都在 Rust 侧弹出，设置读写也改走 Rust 命令（store 插件能写任意路径），前端被注入脚本也碰不到库外文件 |
 | 4 | §5.1 `DocumentMeta` 无 `displayTitle` | 增加 `displayTitle` 字段（Rust 扫描时提取首个 H1） | Sidebar 需要在不读取全文的前提下显示标题；这是对契约的**增量扩展** |
 | 5 | §8.1 `EditorView.scrollIntoView` + smooth | 平滑滚动用 `scrollDOM.scrollTo({behavior:'smooth'})` | CM6 的 `scrollIntoView` 不支持 `behavior` 选项 |
-| 6 | §11.3 注册 14 条命令 | 注册 24 条（新增字体族 / 行高 / 栏宽 / 打印） | spec §5.2 的排版设置需要可达的入口；放进 Command Palette 而不是加设置面板，符合 Less UI 原则 |
+| 6 | §11.3 注册 14 条命令 | 注册 19 条（含打印、更换文档库、设置等，见 `src/commands/registry.ts`） | 字体、字号、栏宽留在顶栏 Aa；「设一次就不常改」的项（外观、语言、拼写检查、文档库）放进 ⌘, 设置面板 |
+| 7 | §3.1 无菜单 | 原生菜单栏（`src/lib/appMenu.ts`） | Mac 用户默认在菜单栏找功能、看快捷键；菜单项与快捷键共用命令注册表，同一次按键经 `dispatchCommand` 去重 |
 
 ---
 
@@ -278,6 +290,7 @@ CJK 每字计 1 + 西文按空白分词；阅读时长 = `CJK/400 + 西文/200` 
 | 切换主题 | ⌘⇧D |
 | 字号增减 | ⌘= / ⌘- |
 | 导出 HTML | ⌘⇧E |
+| 设置 | ⌘, |
 | 撤销 / 重做 | ⌘Z / ⌘⇧Z |
 
 IME 守卫：`event.isComposing === true` 时忽略一切快捷键（spec §11.1）。

@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 
 import { buildCommands } from '@/commands/registry'
+import { dispatchCommand } from '@/commands/dispatch'
 import { shortcutOf } from '@/lib/keys'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -27,6 +28,7 @@ const SHORTCUT_COMMANDS: Record<string, string> = {
   'mod+=': 'font.larger',
   'mod+-': 'font.smaller',
   'mod+shift+e': 'export.html',
+  'mod+,': 'app.settings',
 }
 
 
@@ -38,7 +40,7 @@ export function GlobalShortcuts() {
 
       const ui = useUiStore.getState()
       // overlay 打开时，键位由 overlay 自己处理
-      if (ui.quickOpenVisible || ui.paletteVisible) return
+      if (ui.quickOpenVisible || ui.paletteVisible || ui.settingsVisible) return
 
       // Esc 退出 Focus Mode（R14）
       // 若搜索面板打开，Esc 优先交给编辑器关闭面板
@@ -60,7 +62,7 @@ export function GlobalShortcuts() {
       if (command.when && !command.when()) return
 
       event.preventDefault()
-      void command.run()
+      dispatchCommand(commandId, 'keyboard')
     }
 
     window.addEventListener('keydown', handler, { capture: true })

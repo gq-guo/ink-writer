@@ -36,6 +36,7 @@ const view = new EditorView({
     doc: LONG_DOC,
     extensions: createInkExtensions({
       dark,
+      spellcheck: false,
       onDocChanged: () => {},
       onStatistics: () => {},
       onOutline: () => {},
@@ -260,6 +261,7 @@ async function renderShell(): Promise<void> {
       contentWidth: 680,
       libraryPath: '/library',
       typewriterMode: false,
+      spellcheck: true,
       favorites: ['/library/Blog Post.md'],
       locale: 'system',
     },
@@ -302,6 +304,7 @@ async function renderShell(): Promise<void> {
       import('./components/Toast'),
       import('./components/DocumentOutline'),
     ])
+  const { SettingsPanel } = await import('./components/SettingsPanel')
 
   // ?toast=1：放一条示例提示，检查 toast 的位置与层级
   if (params.get('toast') === '1') {
@@ -336,6 +339,8 @@ async function renderShell(): Promise<void> {
         React.createElement(StatusBar),
       ),
       React.createElement(Toast),
+      // ?settings=1：打开设置面板，检查尺寸与位置
+      params.get('settings') === '1' ? React.createElement(SettingsPanel) : null,
     ),
   )
 }

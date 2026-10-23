@@ -37,10 +37,13 @@ import { inkLinkHandler } from './links'
 import { inkDocHeader } from './docHeader'
 import { inkOutlinePlugin } from './outline'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
+import { inkSpellcheck, spellcheckCompartment } from './spellcheck'
 
 export interface InkExtensionOptions {
   /** 初始是否为深色主题 */
   dark: boolean
+  /** 初始是否开启拼写检查 */
+  spellcheck: boolean
   /** 正文变化（每次击键都会调用） */
   onDocChanged: (update: ViewUpdate) => void
   /** 统计结果 */
@@ -114,7 +117,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
     themeCompartment.of(inkThemeExtension()),
     darkCompartment.of(inkDarkExtension(options.dark)),
     EditorView.lineWrapping,
-    EditorView.contentAttributes.of({ spellcheck: 'false' }),
+    spellcheckCompartment.of(inkSpellcheck(options.spellcheck)),
 
     // ── 桥接 ──
     EditorView.updateListener.of((update) => {

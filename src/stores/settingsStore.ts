@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   contentWidth: 680,
   libraryPath: '',
   typewriterMode: false,
+  spellcheck: true,
   favorites: [],
   locale: 'system',
 }

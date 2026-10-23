@@ -48,6 +48,16 @@
     "macOS": {
       "minimumSystemVersion": "10.15"
     },
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdown"],
+        "contentTypes": ["net.daringfireball.markdown"],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      }
+    ],
     "createUpdaterArtifacts": false
   },
   "plugins": {

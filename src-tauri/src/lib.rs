@@ -7,6 +7,7 @@
 mod access;
 mod encoding;
 mod fs_ops;
+mod open_requests;
 mod search;
 mod watcher;
 
@@ -19,6 +20,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_store::StoreExt;
 
 use access::AccessState;
+use open_requests::OpenRequests;
 
 use fs_ops::{CommandError, DocumentMeta, ReadDocumentResult, WriteResult};
 use search::SearchHit;
@@ -214,6 +216,12 @@ async fn pick_document(
         .map_err(|e| CommandError::new("dialogFailed", e.to_string()))?;
     lock(&state).grant_opened_file(&path)?;
     Ok(Some(path.to_string_lossy().to_string()))
+}
+
+/// 取走 Finder 交来的待打开文件（已授权），取完即清空
+#[tauri::command]
+fn take_open_requests(requests: State<'_, OpenRequests>) -> Vec<String> {
+    requests.take()
 }
 
 /// 导出：弹出保存对话框，授权所选目标文件。取消返回 None。
@@ -553,6 +561,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(AccessState::default())
+        .manage(OpenRequests::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -566,6 +575,7 @@ pub fn run() {
             choose_library,
             change_library,
             pick_document,
+            take_open_requests,
             pick_export_target,
             load_persisted,
             save_persisted,
@@ -588,6 +598,17 @@ pub fn run() {
             start_window_dragging,
             toggle_window_maximize,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Ink");
+        .build(tauri::generate_context!())
+        .expect("error while building Ink")
+        .run(|_app, _event| {
+            // Finder 双击 / 「打开方式」/ 拖到 Dock 图标（tauri.conf.json 的 fileAssociations）
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let paths = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .collect();
+                open_requests::enqueue(_app, paths);
+            }
+        });
 }

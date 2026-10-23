@@ -41,6 +41,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
 
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
+        case 'take_open_requests':
+          return []
         case 'list_documents':
           return [
             {
@@ -93,6 +95,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
+        case 'take_open_requests':
+          return []
         case 'list_documents':
           return []
         case 'read_document':
@@ -134,6 +138,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
+        case 'take_open_requests':
+          return []
         case 'list_documents':
           return []
         case 'read_document':
@@ -173,6 +179,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     )
     invokeMock.mockImplementation(async (command: string) => {
       switch (command) {
+        case 'take_open_requests':
+          return []
         case 'list_documents':
           return []
         case 'read_document':
@@ -231,6 +239,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
       switch (command) {
         case 'set_watch_path':
           return undefined
+        case 'take_open_requests':
+          return []
         case 'list_documents':
           return [
             {
@@ -263,5 +273,50 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     await waitFor(() => {
       expect(container.querySelector('.cm-content')?.textContent).toContain('我的笔记')
     })
+  })
+
+  it('从 Finder 双击 .md 启动时打开那个文件，而不是库里的第一篇', async () => {
+    window.localStorage.setItem(
+      'ink:settings',
+      JSON.stringify({ libraryPath: '/tmp/ink-test-library' }),
+    )
+
+    invokeMock.mockImplementation(async (command: string, args?: { path?: string }) => {
+      switch (command) {
+        case 'take_open_requests':
+          return ['/Users/me/Desktop/Outside.md']
+        case 'list_documents':
+          return [
+            {
+              path: '/tmp/ink-test-library/Sample.md',
+              fileName: 'Sample.md',
+              dirPrefix: '',
+              mtime: 1000,
+              size: 12,
+              displayTitle: '示例',
+            },
+          ]
+        case 'read_document':
+          return {
+            content: args?.path === '/Users/me/Desktop/Outside.md' ? '# 库外文档' : '# 库里第一篇',
+            encoding: 'utf-8',
+            mtime: 1000,
+            size: 12,
+            lineEnding: 'lf',
+          }
+        default:
+          return undefined
+      }
+    })
+
+    const { container } = render(<App />)
+
+    await waitFor(() => {
+      expect(container.querySelector('.cm-content')?.textContent).toContain('库外文档')
+    })
+    const readPaths = invokeMock.mock.calls
+      .filter(([command]) => command === 'read_document')
+      .map(([, args]) => (args as { path: string }).path)
+    expect(readPaths).toEqual(['/Users/me/Desktop/Outside.md'])
   })
 })

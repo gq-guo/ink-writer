@@ -12,6 +12,7 @@ import { setFocusModeEffect } from '@/editor/focusMode'
 import { darkCompartment, inkDarkExtension } from '@/editor/theme'
 import { runCenteringSelfTest } from '@/editor/selftest'
 import { makeSearchPhrases, searchPhrasesCompartment } from '@/editor/searchPhrases'
+import { inkSpellcheck, spellcheckCompartment } from '@/editor/spellcheck'
 import { useLocaleStore } from '@/lib/i18n'
 import { useT } from '@/lib/i18n'
 import { highlightCompartment, isPerformanceMode, noHighlightStyle } from '@/editor/performance'
@@ -100,6 +101,7 @@ export function EditorHost() {
 
     const extensions = createInkExtensions({
       dark: resolveTheme(useSettingsStore.getState().settings.theme) === 'dark',
+      spellcheck: useSettingsStore.getState().settings.spellcheck,
       onDocChanged: handleDocChanged,
       onStatistics: (statistics) => useEditorStore.getState().setStatistics(statistics),
       onOutline: (outline, active) => useEditorStore.getState().setOutline(outline, active),
@@ -234,6 +236,15 @@ export function EditorHost() {
       effects: searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
     })
   }, [locale])
+
+  // ── 拼写检查开关 ──
+  const spellcheck = useSettingsStore((state) => state.settings.spellcheck)
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: spellcheckCompartment.reconfigure(inkSpellcheck(spellcheck)),
+    })
+  }, [spellcheck])
 
   // ── 主题切换：同步 CM6 的深浅变体 ──
   const theme = useSettingsStore((state) => state.settings.theme)

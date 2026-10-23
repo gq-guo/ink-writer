@@ -66,6 +66,8 @@ export interface AppSettings {
   contentWidth: number
   libraryPath: string
   typewriterMode: boolean
+  /** 输入时检查拼写（系统红色波浪线） */
+  spellcheck: boolean
   /** 收藏的文档（绝对路径） */
   favorites: string[]
   /** 界面语言：跟随系统 / 简体中文 / English */
