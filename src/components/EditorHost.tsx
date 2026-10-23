@@ -189,7 +189,8 @@ export function EditorHost() {
         setTypewriterModeEffect.of(currentTypewriterMode()),
       ],
     })
-  }, [openSeq, currentFocusMode, currentTypewriterMode, syncDarkFlag, t])
+  // 依赖里不能放 t：切换语言会让 t 换身份，重跑这里会把正文回滚到打开时的版本
+  }, [openSeq, currentFocusMode, currentTypewriterMode, syncDarkFlag])
 
   // ── 大文件性能模式（spec §18.2）──
   useEffect(() => {
