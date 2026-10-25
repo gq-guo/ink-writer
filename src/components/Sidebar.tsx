@@ -1,10 +1,11 @@
 /**
- * Sidebar（spec W2 / 效果图 2）
+ * Sidebar（spec W2）
  *
- * - 顶部：App 名 + 折叠按钮
- * - 导航：All Documents / Recent / Favorites
- * - 分组：Today / Yesterday / This Week / Earlier
- * - 条目：单行，文档图标 + displayTitle + 收藏星标 + 右对齐的短时间
+ * 不做「软件 UI」式的蓝色选中块，靠排版层级和一道细墨线区分状态：
+ * - 顶部：墨色羽毛 + Ink（折叠用正文左下角的按钮或 ⌥\）
+ * - 导航：Documents 之下缩进的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
+ * - 分组：TODAY / YESTERDAY / LAST 7 DAYS / EARLIER
+ * - 条目：单行，文档图标 + 标题 + 收藏星标 + 右对齐的短时间；当前文档左侧一道细墨线
  * - 底部：+ New Document
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -43,7 +44,6 @@ export function Sidebar() {
   const setSidebarWidth = useUiStore((state) => state.setSidebarWidth)
   const view = useUiStore((state) => state.sidebarView)
   const setSidebarView = useUiStore((state) => state.setSidebarView)
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const documents = useDocumentStore((state) => state.documents)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const openDocument = useDocumentStore((state) => state.openDocument)
@@ -55,10 +55,20 @@ export function Sidebar() {
   const focusMode = useEditorStore((state) => state.focusMode)
 
   const t = useT()
+  const [navOpen, setNavOpen] = useState(true)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+
+  const counts = useMemo(
+    () => ({
+      all: documents.length,
+      recent: Math.min(RECENT_LIMIT, documents.length),
+      favorites: documents.filter((document) => favorites.includes(document.path)).length,
+    }),
+    [documents, favorites],
+  )
 
   const visibleDocuments = useMemo(() => {
     if (view === 'favorites') {
@@ -188,30 +198,39 @@ export function Sidebar() {
     <aside className="ink-sidebar relative" data-hidden={hidden} aria-hidden={hidden}>
       <div className="ink-sidebar-head">
         <span className="ink-icon ink-icon-feather ink-brand" aria-hidden />
-        <span className="ink-brand-name">ink</span>
-        <button className="ink-icon-btn ink-collapse" title={t('sidebar.collapse')} onClick={toggleSidebar}>
-          <span className="ink-icon ink-icon-panel" aria-hidden />
-        </button>
+        <span className="ink-brand-name">Ink</span>
       </div>
 
       <nav className="ink-sidebar-nav">
-        {(
-          [
-            ['all', 'sidebar.all', 'ink-icon-file'],
-            ['recent', 'sidebar.recent', 'ink-icon-clock'],
-            ['favorites', 'sidebar.favorites', 'ink-icon-star'],
-          ] as const
-        ).map(([itemView, labelKey, icon]) => (
-          <button
-            key={itemView}
-            className="ink-nav-item"
-            data-active={view === itemView}
-            onClick={() => setSidebarView(itemView)}
-          >
-            <span className={`ink-icon ${icon}`} aria-hidden />
-            {t(labelKey)}
-          </button>
-        ))}
+        <button
+          className="ink-nav-section"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          <span className="ink-icon ink-icon-file" aria-hidden />
+          {t('sidebar.documents')}
+          <span className="ink-icon ink-icon-chevron" data-open={navOpen} aria-hidden />
+        </button>
+        {navOpen
+          ? (
+              [
+                ['all', 'sidebar.all', 'ink-icon-file'],
+                ['recent', 'sidebar.recent', 'ink-icon-clock'],
+                ['favorites', 'sidebar.favorites', 'ink-icon-star'],
+              ] as const
+            ).map(([itemView, labelKey, icon]) => (
+              <button
+                key={itemView}
+                className="ink-nav-item"
+                data-active={view === itemView}
+                onClick={() => setSidebarView(itemView)}
+              >
+                <span className={`ink-icon ${icon}`} aria-hidden />
+                {t(labelKey)}
+                <span className="ink-nav-count">{counts[itemView]}</span>
+              </button>
+            ))
+          : null}
       </nav>
 
       <div className="min-h-0 flex-1 overflow-hidden py-2">
@@ -237,7 +256,7 @@ export function Sidebar() {
       </div>
 
       <div className="ink-sidebar-foot">
-        <button className="ink-nav-item" onClick={() => void createDocument()}>
+        <button className="ink-new-doc" onClick={() => void createDocument()}>
           <span className="ink-icon ink-icon-plus" aria-hidden />
           {t('sidebar.newDocument')}
         </button>

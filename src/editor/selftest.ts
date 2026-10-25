@@ -64,6 +64,7 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
       extensions: createInkExtensions({
         dark: false,
         spellcheck: false,
+        showMarkup: false,
         onDocChanged: () => {},
         onStatistics: () => {},
         onOutline: () => {},
@@ -136,6 +137,7 @@ export async function runCenteringSelfTest(_view: EditorView): Promise<void> {
         extensions: createInkExtensions({
           dark: false,
           spellcheck: false,
+          showMarkup: false,
           onDocChanged: () => {},
           onStatistics: () => {},
           onOutline: () => {},

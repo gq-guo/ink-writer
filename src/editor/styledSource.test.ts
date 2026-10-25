@@ -2,7 +2,7 @@ import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { describe, expect, it } from 'vitest'
 
-import { buildDecorations } from '@/editor/styledSource'
+import { buildDecorations, concealMarkupFacet, cursorEngagedField } from '@/editor/styledSource'
 import { computeFocusDecorations, focusModeField, setFocusModeEffect } from '@/editor/focusMode'
 
 function stateWith(doc: string, focus = false) {
@@ -215,5 +215,69 @@ describe('Focus Mode（spec §9）', () => {
     const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
     // 被弱化的块不应覆盖光标所在的第一段
     expect(dimRanges(decorations).every((range) => range.from > 0)).toBe(true)
+  })
+})
+
+describe('光标外隐藏 Markdown 标记', () => {
+  function concealed(doc: string, cursor: number, conceal = true): string[] {
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [markdown({ base: markdownLanguage }), concealMarkupFacet.of(conceal)],
+    })
+    const hidden: string[] = []
+    const iter = buildDecorations(state, [{ from: 0, to: state.doc.length }]).iter()
+    while (iter.value) {
+      const spec = (iter.value as { spec?: { class?: string } }).spec
+      if (!spec?.class && iter.to > iter.from) hidden.push(doc.slice(iter.from, iter.to))
+      iter.next()
+    }
+    return hidden
+  }
+
+  const DOC = '## 数据准备\n\n1. 5 个 org 账号 `done` **重点** ~~删掉~~\n\n```\n`代码块不动`\n```'
+
+  it('光标不在的行：隐藏 # 、反引号、粗体与删除线标记', () => {
+    expect(concealed(DOC, DOC.length)).toEqual(['## ', '`', '`', '**', '**', '~~', '~~'])
+  })
+
+  it('光标所在行显示全部标记', () => {
+    // 光标在标题行：标题的 # 不隐藏，列表行照常隐藏
+    expect(concealed(DOC, 3)).toEqual(['`', '`', '**', '**', '~~', '~~'])
+  })
+
+  it('设置为显示标记时不隐藏任何字符', () => {
+    expect(concealed(DOC, DOC.length, false)).toEqual([])
+  })
+
+  it('刚打开文档时光标停在标题行，用户操作前标题的 # 仍然隐藏', () => {
+    const doc = '# OS 迁移测试\n\n正文'
+    const opened = EditorState.create({
+      doc,
+      extensions: [markdown({ base: markdownLanguage }), concealMarkupFacet.of(true), cursorEngagedField],
+    })
+    const hiddenIn = (state: EditorState) => {
+      const hidden: string[] = []
+      const iter = buildDecorations(state, [{ from: 0, to: state.doc.length }]).iter()
+      while (iter.value) {
+        const spec = (iter.value as { spec?: { class?: string } }).spec
+        if (!spec?.class && iter.to > iter.from) hidden.push(doc.slice(iter.from, iter.to))
+        iter.next()
+      }
+      return hidden
+    }
+    expect(hiddenIn(opened)).toEqual(['# '])
+
+    // 程序设置光标（不带 userEvent）不算用户操作
+    const programmatic = opened.update({ selection: { anchor: 2 } }).state
+    expect(hiddenIn(programmatic)).toEqual(['# '])
+
+    // 用户点进标题行后显示源码
+    const clicked = opened.update({ selection: { anchor: 2 }, userEvent: 'select.pointer' }).state
+    expect(hiddenIn(clicked)).toEqual([])
+  })
+
+  it('只有 # 没有文字的标题不隐藏（否则整行看不见）', () => {
+    expect(concealed('#\n\n正文', 5)).toEqual([])
   })
 })

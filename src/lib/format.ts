@@ -1,5 +1,5 @@
 /** 展示用的格式化工具 */
-import { t, useLocaleStore } from '@/lib/i18n'
+import { t } from '@/lib/i18n'
 
 export function formatNumber(n: number): string {
   return n.toLocaleString('en-US')
@@ -21,9 +21,9 @@ export function relativeTime(mtimeSeconds: number, now = Date.now()): string {
 }
 
 /**
- * 文档列表右侧的短时间（效果图 2：一行内，时间右对齐）
- * - 分组视图（组头已经说明了哪天）：今天 / 昨天 → 10:24；本周 → 周三；更早 → 05-01 / 2024
- * - 不分组视图（Recent / Favorites）：今天 → 10:24；昨天 → 昨天；其余 → 05-01 / 2024
+ * 文档列表右侧的短时间（一行内，时间右对齐）
+ * - 分组视图（组头已经说明了哪天）：今天 / 昨天 → 10:24；更早 → 05-01 / 2024-05-01
+ * - 不分组视图（Recent / Favorites）：今天 → 10:24；昨天 → 昨天；其余 → 05-01 / 2024-05-01
  */
 export function listTime(mtimeSeconds: number, grouped: boolean, now = Date.now()): string {
   const date = new Date(mtimeSeconds * 1000)
@@ -32,20 +32,17 @@ export function listTime(mtimeSeconds: number, grouped: boolean, now = Date.now(
     return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
   }
   if (group === 'yesterday') return t('time.yesterday')
-  if (grouped && group === 'thisWeek') {
-    return date.toLocaleDateString(useLocaleStore.getState().locale, { weekday: 'short' })
-  }
-  if (date.getFullYear() !== new Date(now).getFullYear()) return String(date.getFullYear())
-  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const md = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return date.getFullYear() === new Date(now).getFullYear() ? md : `${date.getFullYear()}-${md}`
 }
 
-/** 文档头的修改时间：Today, 11:04 / Yesterday, 18:32 / 05-01 / 2024-05-01 */
+/** 文档头的修改时间：Today · 11:04 / Yesterday · 18:32 / 05-01 / 2024-05-01 */
 export function formatMetaTime(mtimeSeconds: number, now = Date.now()): string {
   const date = new Date(mtimeSeconds * 1000)
   const hm = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
   const group = groupFor(mtimeSeconds, now)
-  if (group === 'today') return `${t('meta.today')}, ${hm}`
-  if (group === 'yesterday') return `${t('meta.yesterday')}, ${hm}`
+  if (group === 'today') return `${t('meta.today')} · ${hm}`
+  if (group === 'yesterday') return `${t('meta.yesterday')} · ${hm}`
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
@@ -68,7 +65,7 @@ export function groupFor(mtimeSeconds: number, now = Date.now()): DateGroup {
 export const GROUP_LABELS: Record<DateGroup, string> = {
   today: 'Today',
   yesterday: 'Yesterday',
-  thisWeek: 'This Week',
+  thisWeek: 'Last 7 Days',
   earlier: 'Earlier',
 }
 

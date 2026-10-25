@@ -1,8 +1,11 @@
 /**
- * 顶栏（效果图 1 / 效果图 2）
+ * 顶栏
  *
  * 左：文档图标 + 文件名（点击就地内联编辑，Finder 风格）
  * 中：Focus Mode 状态胶囊；右：搜索 / 排版 / 更多
+ *
+ * 文件名与右侧工具默认隐藏，鼠标移到窗口顶部才慢慢浮现（⌘K 覆盖绝大多数操作）；
+ * 模式胶囊是状态提示，始终可见。
  *
  * 注意：window.prompt 在 Tauri 的 WKWebView 里不受支持（返回 null），
  * 所有重命名入口（顶栏点击 / 更多菜单 / 命令面板）统一走内联编辑。
@@ -19,8 +22,14 @@ import { editorBridge } from '@/editor/bridge'
 import { TypographyPopover } from './TypographyPopover'
 import { MoreMenu } from './MoreMenu'
 
+/** 鼠标进入窗口顶部这么高的范围内时显示工具 */
+const REVEAL_ZONE_PX = 76
+/** 离开到这么低以下才收起（留一段缓冲，鼠标在边界附近晃动时不闪） */
+const HIDE_ZONE_PX = 120
+
 export function TopBar() {
   const t = useT()
+  const [revealed, setRevealed] = useState(false)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const renameDocument = useDocumentStore((state) => state.renameDocument)
   const focusMode = useEditorStore((state) => state.focusMode)
@@ -85,10 +94,26 @@ export function TopBar() {
     void renameDocument(activeDocument.path, name)
   }
 
+  // 鼠标靠近顶部时显示；菜单 / 排版弹层 / 重命名期间保持显示
+  const pinned = menuOpen || typographyOpen || editing
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      if (event.clientY <= REVEAL_ZONE_PX) setRevealed(true)
+      else if (event.clientY > HIDE_ZONE_PX) setRevealed(false)
+    }
+    const onLeave = () => setRevealed(false)
+    window.addEventListener('mousemove', onMove)
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      document.documentElement.removeEventListener('mouseleave', onLeave)
+    }
+  }, [])
+
   const fileName = activeDocument?.fileName ?? ''
 
   return (
-    <div className="ink-topbar">
+    <div className="ink-topbar" data-revealed={revealed || pinned}>
       <div className="ink-topbar-left">
         <span className="ink-icon ink-icon-file" aria-hidden />
         {editing ? (

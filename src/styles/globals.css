@@ -66,16 +66,21 @@
    ========================================================================== */
 
 :root {
-  --background: #fafaf8;
-  --foreground: #1d1d1f;
-  --secondary: #86868b;
-  --border: #e5e5e0;
-  --accent: #007aff;
-  --selection: color-mix(in srgb, var(--accent) 18%, transparent);
-  --surface: #ffffff;
-  --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.12);
-  --code-bg: #f2f1ec;
-  --overlay-mask: rgba(0, 0, 0, 0.2);
+  /* 「数字纸张」：编辑区、侧栏、浮层是三层很轻的纸色，而不是三种白；
+     蓝色退场，accent 是一点灰绿，只用于极少量的交互反馈 */
+  --background: #faf9f6;
+  --sidebar: #f2f1ec;
+  --foreground: #292824;
+  --secondary: #929087;
+  --border: #dedcd5;
+  --accent: #6e756d;
+  --selection: #e8e5dd;
+  --highlight: #ece3c3;
+  --highlight-strong: #e0d08f;
+  --surface: #fcfbf8;
+  --shadow-overlay: 0 10px 32px rgba(41, 40, 36, 0.1);
+  --code-bg: #efeee8;
+  --overlay-mask: rgba(41, 40, 36, 0.14);
 
   /* 代码高亮（spec §2.1 代码块语法高亮） */
   --code-keyword: #a33aa3;
@@ -91,13 +96,16 @@
   --editor-max-width: 680px;
   --sidebar-width: 240px;
   --overlay-width: 560px;
-  --radius-overlay: 10px;
-  --radius-card: 8px;
+  /* 圆角收小：UI 元素尽量「平」，圆角是塑料感的主要来源 */
+  --radius-overlay: 6px;
+  --radius-card: 4px;
 
   /* 字体栈（spec §17.2） */
   --ui-font: -apple-system, 'SF Pro Text', 'Inter', 'PingFang SC', sans-serif;
-  --writing-font: 'iA Writer Quattro', -apple-system, 'PingFang SC', sans-serif;
+  --writing-font: ui-serif, 'New York', Georgia, 'Songti SC', serif;
   --code-font: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  /* 衬线：品牌字、无 H1 文档的大标题（不随写作字体设置变化） */
+  --writing-serif: ui-serif, 'New York', Georgia, 'Songti SC', serif;
   --writing-font-size: 18px;
   --writing-line-height: 1.7;
 
@@ -131,16 +139,19 @@
 }
 
 [data-theme='dark'] {
-  --background: #171717;
-  --foreground: #ededed;
-  --secondary: #8e8e93;
-  --border: #2a2a2a;
-  --accent: #0a84ff;
-  --selection: color-mix(in srgb, var(--accent) 18%, transparent);
-  --surface: #1f1f1f;
-  --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.5);
-  --code-bg: #232323;
-  --overlay-mask: rgba(0, 0, 0, 0.45);
+  --background: #1b1a18;
+  --sidebar: #171614;
+  --foreground: #e7e4dc;
+  --secondary: #8e8b82;
+  --border: #2f2d29;
+  --accent: #a3aa9f;
+  --selection: #3a3833;
+  --highlight: #4a4430;
+  --highlight-strong: #6a5f3a;
+  --surface: #23221f;
+  --shadow-overlay: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --code-bg: #262521;
+  --overlay-mask: rgba(0, 0, 0, 0.4);
 
   --code-keyword: #d08fd8;
   --code-string: #9ecb8a;
@@ -308,12 +319,13 @@ input {
 }
 
 .cm-searchMatch {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 2px;
+  /* 查找命中像荧光笔划过纸面（暖黄），而不是软件里的蓝色高亮 */
+  background: var(--highlight);
+  border-radius: 1px;
 }
 
 .cm-searchMatch.cm-searchMatch-selected {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--highlight-strong);
 }
 
 .cm-placeholder {
@@ -386,7 +398,7 @@ html .cm-editor .cm-search.cm-panel {
   padding: 10px 42px 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   box-shadow: var(--shadow-overlay);
   animation: ink-search-in 160ms ease-out;
 }
@@ -462,7 +474,7 @@ html .cm-editor .cm-search.cm-panel input.cm-textfield[name='search'] {
   background-position: 9px center;
   background-size: 14px 14px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 3px;
 }
 
 html .cm-editor .cm-search.cm-panel input.cm-textfield[name='search']:focus {
@@ -482,7 +494,7 @@ html .cm-editor .cm-search.cm-panel input.cm-textfield[name='replace'] {
   color: var(--foreground);
   background-color: var(--background);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 html .cm-editor .cm-search.cm-panel input.cm-textfield[name='replace']:focus {
@@ -504,7 +516,7 @@ html .cm-editor .cm-search.cm-panel button.cm-button[name='next'] {
   color: var(--secondary);
   background: none;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 3px;
 }
 
 html .cm-editor .cm-search.cm-panel button.cm-button[name='prev']::before,
@@ -542,7 +554,7 @@ html .cm-editor .cm-search.cm-panel button.cm-button[name='replaceAll'] {
   color: var(--secondary);
   background: none;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
@@ -563,7 +575,7 @@ html .cm-editor .cm-search.cm-panel label {
   padding: 0 8px 0 6px;
   font-size: 11px;
   color: var(--secondary);
-  border-radius: 6px;
+  border-radius: 4px;
   white-space: nowrap;
   user-select: none;
 }
@@ -619,7 +631,7 @@ html .cm-editor .cm-search.cm-panel button[name='close'] {
   color: var(--secondary);
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 html .cm-editor .cm-search.cm-panel button[name='close']:hover {
@@ -632,11 +644,11 @@ html .cm-editor .cm-content {
 }
 
 html .cm-editor .cm-searchMatch {
-  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  background-color: var(--highlight);
 }
 
 html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
-  background-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background-color: var(--highlight-strong);
 }
 
 /* ==========================================================================
@@ -652,9 +664,9 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   opacity: 0.35;
 }
 
-/* 当前块：左侧 accent 竖线（效果图 1） */
+/* 当前块：左侧一道细墨线（效果图 1） */
 .cm-content .ink-focus-active {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid color-mix(in srgb, var(--foreground) 70%, transparent);
   margin-left: -14px;
   padding-left: 12px;
 }
@@ -691,9 +703,12 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   max-width: var(--sidebar-width);
-  height: 100%;
+  /* 侧栏的纸色一直铺到窗口顶部（红绿灯压在侧栏上），而不是在标题栏下方截断 */
+  margin-top: calc(-1 * var(--titlebar-height));
+  height: calc(100% + var(--titlebar-height));
+  padding-top: var(--titlebar-height);
   border-right: 1px solid var(--border);
-  background: var(--background);
+  background: var(--sidebar);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -725,48 +740,61 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-doc-item {
-  /* 单行（效果图 2）：图标 · 标题 · 收藏 · 右对齐时间；与导航项同样左右内缩 8px */
+  /* 单行：图标 · 标题 · 收藏 · 右对齐时间。没有底色，当前文档只靠左侧一道细墨线 */
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 0 8px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 6px 20px 6px 38px;
   cursor: default;
-}
-
-.ink-doc-item[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-}
-
-.ink-doc-item:hover:not([data-active='true']) {
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
 
 .ink-doc-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--ui-font-size);
-  color: var(--foreground);
+  font-size: 14px;
+  color: color-mix(in srgb, var(--foreground) 78%, var(--secondary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 120ms ease;
+}
+
+.ink-doc-item:hover .ink-doc-title,
+.ink-doc-item[data-active='true'] .ink-doc-title {
+  color: var(--foreground);
+}
+
+.ink-doc-item[data-active='true'] .ink-doc-title {
+  font-weight: 500;
+}
+
+/* 当前项的墨线（文档列表与 All / Recent / Favorites 共用） */
+.ink-doc-item[data-active='true']::before,
+.ink-nav-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: 28px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--foreground);
 }
 
 .ink-doc-time {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--secondary);
 }
 
 .ink-group-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   color: var(--secondary);
-  /* 与条目文字左对齐：8px 内缩 + 8px 内边距 */
-  padding: 14px 16px 4px;
+  /* 与 Documents 的图标左对齐 */
+  padding: 20px 20px 6px 24px;
   text-transform: uppercase;
 }
 
@@ -833,7 +861,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   justify-content: space-between;
   gap: 12px;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 13px;
 }
 
@@ -854,7 +882,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-overlay-item[data-selected='true'] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
 .ink-overlay-item:hover {
@@ -862,7 +890,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-overlay-item:hover[data-selected='true'] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
 .ink-overlay-sub {
@@ -919,7 +947,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-button {
   font-size: 12px;
   padding: 5px 12px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--background);
 }
@@ -979,7 +1007,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-family: var(--code-font);
   font-size: 12px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--code-bg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -996,14 +1024,14 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-segmented {
   display: inline-flex;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: 3px;
   background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .ink-segmented button {
   font-size: 12px;
   padding: 3px 10px;
-  border-radius: 5px;
+  border-radius: 3px;
   color: var(--secondary);
   transition: background 120ms ease, color 120ms ease;
 }
@@ -1068,12 +1096,30 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   justify-content: space-between;
   gap: 12px;
   height: 40px;
-  padding: 0 14px 0 max(80px, calc((100% - var(--editor-max-width)) / 2 + 24px));
+  /* 侧栏收起时红绿灯压在主区左上角，文件名要让开 */
+  padding: 0 16px 0 84px;
 }
 
-/* 侧栏展开时 <main> 右移、无红绿灯遮挡：文件名与正文栏左对齐 */
 .ink-shell main[data-sidebar='true'] .ink-topbar {
-  padding-left: calc((100% - var(--editor-max-width)) / 2 + 24px);
+  padding-left: 24px;
+}
+
+/* 文件名与工具默认隐藏，鼠标移到顶部才慢慢浮现（模式胶囊始终可见） */
+.ink-topbar-left,
+.ink-topbar-right {
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+
+.ink-topbar[data-revealed='false'] .ink-topbar-left *,
+.ink-topbar[data-revealed='false'] .ink-topbar-right * {
+  pointer-events: none;
+}
+
+.ink-topbar[data-revealed='true'] .ink-topbar-left,
+.ink-topbar[data-revealed='true'] .ink-topbar-right {
+  opacity: 1;
+  transition-duration: 180ms;
 }
 
 .ink-topbar-left {
@@ -1084,7 +1130,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-topbar-name {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--secondary);
   max-width: 320px;
   overflow: hidden;
@@ -1104,7 +1150,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   color: var(--foreground);
   background: var(--surface);
   border: 1px solid var(--accent);
-  border-radius: 5px;
+  border-radius: 3px;
   padding: 2px 6px;
   width: 220px;
   outline: none;
@@ -1128,7 +1174,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-size: 11px;
   color: var(--foreground);
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  border-radius: 999px;
+  border-radius: 3px;
   white-space: nowrap;
 }
 
@@ -1145,7 +1191,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--secondary);
   transition: background 120ms ease, color 120ms ease;
 }
@@ -1206,7 +1252,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   padding: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
   box-shadow: var(--shadow-overlay);
   font-size: 12px;
 }
@@ -1227,7 +1273,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-font-item {
   text-align: left;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 13px;
   color: var(--foreground);
 }
@@ -1260,7 +1306,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-stepper button {
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: 3px;
   color: var(--secondary);
 }
 
@@ -1286,7 +1332,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 12px;
   color: var(--foreground);
   text-align: left;
@@ -1326,70 +1372,139 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-sidebar-head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px 12px 6px;
+  gap: 8px;
+  padding: 8px 20px 18px 24px;
 }
 
+/* 墨色羽毛，不做彩色 logo */
 .ink-brand {
-  color: var(--accent);
+  width: 16px;
+  height: 16px;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent);
 }
 
 .ink-brand-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--writing-serif);
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 500;
   letter-spacing: 0.01em;
-}
-
-.ink-collapse {
-  margin-left: auto;
+  color: var(--foreground);
 }
 
 .ink-sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 0 8px 6px;
+  padding-bottom: 4px;
 }
 
-.ink-nav-item {
+.ink-nav-section {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--secondary);
+  padding: 6px 20px 6px 24px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--foreground);
   text-align: left;
 }
 
+.ink-nav-section .ink-icon-file {
+  width: 15px;
+  height: 15px;
+}
+
+/* 折叠提示：放在右侧、很淡，鼠标移上来才明显 */
+.ink-icon-chevron {
+  width: 10px;
+  height: 10px;
+  margin-left: auto;
+  color: var(--secondary);
+  opacity: 0;
+  -webkit-mask-image: var(--ink-icon-chevron-down);
+  mask-image: var(--ink-icon-chevron-down);
+  transition: transform 150ms ease;
+}
+
+.ink-nav-section:hover .ink-icon-chevron,
+.ink-icon-chevron[data-open='false'] {
+  opacity: 1;
+}
+
+.ink-icon-chevron[data-open='false'] {
+  transform: rotate(-90deg);
+}
+
+.ink-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 20px 6px 38px;
+  font-size: 14.5px;
+  color: var(--secondary);
+  text-align: left;
+  transition: color 120ms ease;
+}
+
 .ink-nav-item:hover {
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
   color: var(--foreground);
 }
 
 .ink-nav-item[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.ink-nav-item .ink-icon,
+.ink-doc-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--secondary);
+}
+
+.ink-nav-item[data-active='true'] .ink-icon,
+.ink-doc-item[data-active='true'] .ink-doc-icon {
+  color: var(--foreground);
+}
+
+.ink-nav-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary);
 }
 
 .ink-sidebar-foot {
-  padding: 6px 8px 10px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--border);
 }
 
-.ink-doc-icon {
-  flex-shrink: 0;
+.ink-new-doc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 14px;
   color: var(--secondary);
-  width: 13px;
-  height: 13px;
+  text-align: left;
+  transition: color 120ms ease;
+}
+
+.ink-new-doc:hover {
+  color: var(--foreground);
 }
 
 .ink-fav {
   flex-shrink: 0;
-  color: var(--accent);
-  width: 11px;
-  height: 11px;
+  color: var(--secondary);
+  width: 10px;
+  height: 10px;
 }
 
 /* ==========================================================================
@@ -1397,33 +1512,38 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
    ========================================================================== */
 
 .ink-doc-header {
-  /* 编辑器内的块级 widget：间距只能用 padding（margin 不计入 CM6 的高度测量） */
-  padding: 0 0 28px;
+  /* 编辑器内的块级 widget：间距只能用 padding（margin 不计入 CM6 的高度测量）。
+     节奏：标题 → 元信息贴近，元信息 → 正文拉开（≈56px，含其后的空行） */
+  padding: 0 0 48px;
   font-family: var(--ui-font);
   line-height: 1.4;
   cursor: default;
   user-select: none;
 }
 
-/* 紧跟在首行 H1 下方：贴近标题；H1 后通常还有一个空行，下边距收小 */
+/* 紧跟在首行 H1 下方：H1 后通常还有一个空行（≈33px），下边距只补一部分 */
 .ink-doc-header[data-after-h1='true'] {
-  padding: 2px 0 4px;
+  padding: 10px 0 24px;
 }
 
+/* 没有 H1 时用文件名当大标题，与正文 H1 同一套字号字重 */
 .ink-doc-heading {
-  font-size: 1.6em;
-  font-weight: 700;
+  font-family: var(--writing-font);
+  font-size: 1.78em;
+  font-weight: 600;
+  line-height: 1.25;
   letter-spacing: -0.01em;
-  color: var(--foreground);
-  padding-bottom: 6px;
+  color: color-mix(in srgb, var(--foreground) 92%, var(--secondary));
+  padding-bottom: 12px;
 }
 
 .ink-doc-meta {
-  font-size: 12px;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
   color: var(--secondary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .ink-dot {
@@ -1448,7 +1568,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   pointer-events: auto;
   font-size: 11px;
   color: var(--secondary);
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 3px 8px;
 }
 
@@ -1487,7 +1607,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
   box-shadow: var(--shadow-overlay);
   font-size: 12px;
 }
@@ -1669,7 +1789,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   overflow: hidden;
   padding: 8px 6px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 6px;
   font-family: var(--ui-font);
   transition:
     background-color 160ms ease,
@@ -1695,7 +1815,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   gap: 12px;
   height: 12px;
   padding: 0 4px;
-  border-radius: 7px;
+  border-radius: 3px;
   color: var(--secondary);
   text-align: left;
   cursor: pointer;

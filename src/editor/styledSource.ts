@@ -1,15 +1,27 @@
 /**
  * 样式化源码插件（spec §2 / R1）
  *
- * 原则：语法符号始终可见，只是弱化；标题、加粗等做视觉增强。
- * 不隐藏任何字符 —— 光标在任何位置，看到的文本与磁盘文件一字不差。
+ * 原则：语法符号只弱化不删改；标题、加粗等做视觉增强。文本与磁盘文件一字不差。
+ *
+ * 标记隐藏（设置「显示 Markdown 标记」关闭时，默认）：光标不在的行隐藏
+ * 标题的 # 、粗斜体的 * _、删除线的 ~~、行内代码的反引号、行内链接的 [ ](url)、转义的 \；
+ * 光标所在行（含选区覆盖的行）照常显示全部标记，编辑时看到的仍是源码。
+ * 列表、引用、图片、引用式链接、表格的标记不隐藏（只弱化）。
  *
  * 块级样式：遍历 syntaxTree(view.state) 的可见区间（view.visibleRanges）
  * 行内样式：同一插件对可见区间内的行内节点产出 Decoration.mark
  * 只计算可见区间 ±200 行，禁止全文档 decoration
  */
 import { syntaxTree, syntaxTreeAvailable } from '@codemirror/language'
-import { StateEffect, StateField, type EditorState, type Range } from '@codemirror/state'
+import {
+  Compartment,
+  Facet,
+  StateEffect,
+  StateField,
+  Transaction,
+  type EditorState,
+  type Range,
+} from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 
@@ -44,6 +56,35 @@ export const transientBlankLineField = StateField.define<number | null>({
     return tr.state.doc.lineAt(mapped).from === line.from ? line.from : null
   },
 })
+
+/** 是否隐藏光标外的标记（= 设置里「显示 Markdown 标记」关闭） */
+export const concealMarkupFacet = Facet.define<boolean, boolean>({
+  combine: (values) => values[values.length - 1] ?? false,
+})
+
+/** 设置切换时重配 concealMarkupFacet，不重建 EditorView */
+export const concealCompartment = new Compartment()
+
+/**
+ * 用户是否已经动过光标（点击、方向键、输入）。
+ * 刚打开文档时光标默认停在第一行（多半是 H1），这不代表用户在编辑这一行，
+ * 标记照常隐藏；用户第一次操作之后，光标所在行才显示标记。打开新文档会重建 EditorState，随之复位。
+ */
+export const cursorEngagedField = StateField.define<boolean>({
+  create: () => false,
+  update: (engaged, tr) => engaged || tr.annotation(Transaction.userEvent) !== undefined,
+})
+
+/** 选区覆盖的行（这些行显示全部标记） */
+function selectionLines(state: EditorState): Set<number> {
+  const lines = new Set<number>()
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number
+    const last = state.doc.lineAt(range.to).number
+    for (let line = first; line <= last; line++) lines.add(line)
+  }
+  return lines
+}
 
 /** 插件在 update 之外重建了装饰（解析延迟），用一个空事务让 CM6 重新读取 */
 const refreshStyledSourceEffect = StateEffect.define<null>()
@@ -112,6 +153,48 @@ export function buildDecorations(
     for (let ln = startLine; ln <= endLine; ln++) addLineClass(ln, cls)
   }
 
+  // 没装 cursorEngagedField（单测）时按「已操作」处理
+  const engaged = state.field(cursorEngagedField, false) ?? true
+  const activeLines = state.facet(concealMarkupFacet)
+    ? engaged
+      ? selectionLines(state)
+      : new Set<number>()
+    : null
+  const conceal = (from: number, to: number) => {
+    if (!activeLines || to <= from) return
+    const line = state.doc.lineAt(from).number
+    // ViewPlugin 的装饰不能替换换行（跨行的链接等保持原样）
+    if (activeLines.has(line) || state.doc.lineAt(to).number !== line) return
+    builder.marks.push(Decoration.replace({}).range(from, to))
+  }
+
+  /** 链接 / 图片的文字：[ 与 ] 之间（不含后面的 (url) 或 [label]） */
+  const linkText = (node: SyntaxNode): { open: SyntaxNode; close: SyntaxNode } | null => {
+    const marks = childrenOf(node).filter((child) => child.name === 'LinkMark')
+    const open = marks[0]
+    const close = marks.find((mark) => state.doc.sliceString(mark.from, mark.to) === ']')
+    return open && close && close.from >= open.to ? { open, close } : null
+  }
+
+  /** ATX 标题的 # ：开头的连同后面的空格、结尾的连同前面的空格一起隐藏 */
+  const concealHeaderMark = (mark: SyntaxNode) => {
+    const heading = mark.parent
+    if (!heading || !heading.name.startsWith('ATXHeading')) return
+    const content = contentBetweenMarkers(heading)
+    const text = state.doc.sliceString(heading.from, heading.to)
+    if (!/^\s*#{1,6}\s+\S/.test(text)) return
+    const line = state.doc.lineAt(mark.from)
+    if (heading.firstChild?.from === mark.from) {
+      let end = mark.to
+      while (end < line.to && /\s/.test(state.doc.sliceString(end, end + 1))) end++
+      conceal(mark.from, end)
+    } else if (content) {
+      let start = mark.from
+      while (start > line.from && /\s/.test(state.doc.sliceString(start - 1, start))) start--
+      conceal(start, mark.to)
+    }
+  }
+
   for (const range of visibleRanges) {
     syntaxTree(state).iterate({
       from: range.from,
@@ -122,7 +205,9 @@ export function buildDecorations(
         const children = childrenOf(node)
 
         switch (name) {
-          case 'Paragraph': {
+          // 任务项的文字是 Task 节点而不是 Paragraph：同样给段间距，任务列表与普通列表疏密一致
+          case 'Paragraph':
+          case 'Task': {
             const target = paragraphSpacingLine(state, node.to)
             if (target !== null) addLineClass(target, 'cm-md-para')
             break
@@ -135,7 +220,13 @@ export function buildDecorations(
           case 'ATXHeading6':
           case 'SetextHeading1':
           case 'SetextHeading2': {
-            addLineRangeClass(node.from, node.to, HEADING_CLASS[name]!)
+            // Setext 标题的下划线（=== / ---）单独成行，不按标题字号放大
+            const underline = name.startsWith('Setext') ? children.find((c) => c.name === 'HeaderMark') : null
+            if (underline && state.doc.lineAt(underline.from).number > state.doc.lineAt(node.from).number) {
+              addLineRangeClass(node.from, state.doc.lineAt(underline.from).from - 1, HEADING_CLASS[name]!)
+            } else {
+              addLineRangeClass(node.from, node.to, HEADING_CLASS[name]!)
+            }
             // 标题文字用 accent 色（效果图：# Hello World 整体蓝色），
             // 内容区间 = 首个标记之后 ~ 末尾标记之前
             const content = contentBetweenMarkers(node)
@@ -151,6 +242,9 @@ export function buildDecorations(
           case 'EmphasisMark':
           case 'StrikethroughMark': {
             addMark(node.from, node.to, 'cm-md-mark')
+            if (name === 'HeaderMark') concealHeaderMark(node)
+            else if (name === 'EmphasisMark' || name === 'StrikethroughMark') conceal(node.from, node.to)
+            else if (name === 'CodeMark' && node.parent?.name === 'InlineCode') conceal(node.from, node.to)
             break
           }
           case 'StrongEmphasis': {
@@ -178,15 +272,32 @@ export function buildDecorations(
             break
           }
           case 'ListItem': {
-            // 悬挂缩进：以列表标记宽度对齐
+            // 嵌套靠源码里的前导空格表达：衬线体的空格很窄，两个空格几乎看不出层级，
+            // 所以把前导空格加宽（cm-md-list-lead），每个约 0.6em；
+            // 悬挂缩进：折行后的文字与列表标记后的文字对齐
             const mark = children.find((c) => c.name === 'ListMark')
             if (mark) {
-              const markText = state.doc.sliceString(mark.from, mark.to)
-              const width = markText.length + 1
-              const depth = listDepth(node)
-              const indent = depth * 2 + width
-              const lineNumber = state.doc.lineAt(node.from).number
-              builder.lineStyles.set(lineNumber, `padding-left:${indent}ch;text-indent:-${width}ch`)
+              const line = state.doc.lineAt(node.from)
+              if (line.from > mark.from) break
+              const prefix = line.text.slice(0, mark.from - line.from)
+              let spaces = 0
+              let others = 0
+              for (const ch of prefix) {
+                if (ch === ' ') spaces += 1
+                else if (ch === '\t') spaces += 4
+                else others += 1
+              }
+              for (const run of prefix.matchAll(/[ \t]+/g)) {
+                addMark(line.from + run.index, line.from + run.index + run[0].length, 'cm-md-list-lead')
+              }
+              const markWidth = state.doc.sliceString(mark.from, mark.to).length + 1
+              const hang = `${(spaces * LIST_LEAD_SPACE_EM).toFixed(2)}em + ${others + markWidth}ch`
+              // 引用里的列表：行内 style 会盖掉 .cm-md-quote 的左内边距，这里补回来
+              const quote = hasAncestor(node, 'Blockquote') ? `${QUOTE_PADDING_PX}px + ` : ''
+              builder.lineStyles.set(
+                line.number,
+                `padding-left:calc(${quote}${hang});text-indent:calc(-1 * (${hang}))`,
+              )
               addMark(mark.from, mark.to, 'cm-md-mark')
             }
             break
@@ -203,8 +314,41 @@ export function buildDecorations(
           }
           case 'Link':
           case 'Image': {
-            const content = contentBetweenMarkers(node)
-            if (content) addMark(content.from, content.to, 'cm-md-link-text')
+            const text = linkText(node)
+            if (!text) break
+            addMark(text.open.to, text.close.from, 'cm-md-link-text')
+            // 行内链接 [文字](url)：光标外只留下划线的文字；图片与引用式链接保持原样
+            if (name === 'Link' && children.some((child) => child.name === 'URL')) {
+              conceal(text.open.from, text.open.to)
+              conceal(text.close.from, node.to)
+            }
+            break
+          }
+          case 'Escape': {
+            // \* → 光标外只显示 *
+            conceal(node.from, node.from + 1)
+            break
+          }
+          case 'TaskMarker':
+          case 'TableDelimiter':
+          case 'HTMLTag':
+          case 'HTMLBlock':
+          case 'CommentBlock':
+          case 'Comment': {
+            addMark(node.from, node.to, 'cm-md-mark')
+            break
+          }
+          case 'TableHeader': {
+            for (const cell of children) {
+              if (cell.name === 'TableCell') addMark(cell.from, cell.to, 'cm-md-bold')
+            }
+            break
+          }
+          case 'CodeBlock': {
+            // 缩进代码块：与围栏代码块同样的底色
+            addLineRangeClass(node.from, node.to, 'cm-md-codeblock')
+            addLineClass(state.doc.lineAt(node.from).number, 'cm-md-codeblock-start')
+            addLineClass(state.doc.lineAt(node.to).number, 'cm-md-codeblock-end')
             break
           }
           case 'URL': {
@@ -212,7 +356,9 @@ export function buildDecorations(
             break
           }
           case 'HorizontalRule': {
+            // 横线画在整行上（贯穿正文栏），--- 本身透明
             addMark(node.from, node.to, 'cm-md-hr')
+            addLineClass(state.doc.lineAt(node.from).number, 'cm-md-hr-line')
             break
           }
           default:
@@ -293,15 +439,16 @@ function isParagraphLine(state: EditorState, lineNumber: number): boolean {
   return false
 }
 
-/** 列表项的嵌套深度 */
-function listDepth(node: SyntaxNode): number {
-  let depth = 0
-  let parent = node.parent
-  while (parent) {
-    if (parent.name === 'ListItem') depth += 1
-    parent = parent.parent
+/** 列表前导空格加宽后的宽度（衬线体空格约 0.25em + letter-spacing 0.35em） */
+const LIST_LEAD_SPACE_EM = 0.6
+/** 与 theme.ts 的 .cm-md-quote paddingLeft 一致 */
+const QUOTE_PADDING_PX = 16
+
+function hasAncestor(node: SyntaxNode, name: string): boolean {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (parent.name === name) return true
   }
-  return Math.max(0, depth - 1)
+  return false
 }
 
 /** 可见区间 ± pad 行 */
@@ -343,7 +490,9 @@ export const inkStyledSourcePlugin = ViewPlugin.fromClass(
       if (
         update.docChanged ||
         update.viewportChanged ||
-        (update.selectionSet && selectionCrossedLine(update))
+        (update.selectionSet && selectionCrossedLine(update)) ||
+        update.startState.facet(concealMarkupFacet) !== update.state.facet(concealMarkupFacet) ||
+        update.startState.field(cursorEngagedField, false) !== update.state.field(cursorEngagedField, false)
       ) {
         this.rebuild(update.view)
       }

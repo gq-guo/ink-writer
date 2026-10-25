@@ -126,6 +126,14 @@ export function SettingsPanel() {
             />
           </div>
           <div className="ink-settings-row">
+            <span>{t('settings.showMarkup')}</span>
+            <Switch
+              label={t('settings.showMarkup')}
+              checked={settings.showMarkup}
+              onChange={(showMarkup) => update({ showMarkup })}
+            />
+          </div>
+          <div className="ink-settings-row">
             <span>{t('settings.typewriter')}</span>
             <Switch
               label={t('settings.typewriter')}
@@ -133,6 +141,7 @@ export function SettingsPanel() {
               onChange={(typewriterMode) => update({ typewriterMode })}
             />
           </div>
+          <p className="ink-settings-hint">{t('settings.showMarkupHint')}</p>
           <p className="ink-settings-hint">{t('settings.typographyHint')}</p>
         </section>
 

@@ -59,6 +59,7 @@ export type ConflictChoice = 'keep-mine' | 'load-disk' | 'save-copy'
 
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
+  /** 已不再生效（accent 跟随主题），保留字段以兼容旧设置文件 */
   accentColor: string
   fontFamily: 'system' | 'quattro' | 'plex' | 'serif' | 'mono'
   fontSize: number
@@ -68,6 +69,8 @@ export interface AppSettings {
   typewriterMode: boolean
   /** 输入时检查拼写（系统红色波浪线） */
   spellcheck: boolean
+  /** 显示全部 Markdown 标记；关闭时光标不在的行隐藏 # ** ` 等标记 */
+  showMarkup: boolean
   /** 收藏的文档（绝对路径） */
   favorites: string[]
   /** 界面语言：跟随系统 / 简体中文 / English */

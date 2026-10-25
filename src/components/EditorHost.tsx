@@ -13,6 +13,7 @@ import { darkCompartment, inkDarkExtension } from '@/editor/theme'
 import { runCenteringSelfTest } from '@/editor/selftest'
 import { makeSearchPhrases, searchPhrasesCompartment } from '@/editor/searchPhrases'
 import { inkSpellcheck, spellcheckCompartment } from '@/editor/spellcheck'
+import { concealCompartment, concealMarkupFacet } from '@/editor/styledSource'
 import { useLocaleStore } from '@/lib/i18n'
 import { useT } from '@/lib/i18n'
 import { highlightCompartment, isPerformanceMode, noHighlightStyle } from '@/editor/performance'
@@ -102,6 +103,7 @@ export function EditorHost() {
     const extensions = createInkExtensions({
       dark: resolveTheme(useSettingsStore.getState().settings.theme) === 'dark',
       spellcheck: useSettingsStore.getState().settings.spellcheck,
+      showMarkup: useSettingsStore.getState().settings.showMarkup,
       onDocChanged: handleDocChanged,
       onStatistics: (statistics) => useEditorStore.getState().setStatistics(statistics),
       onOutline: (outline, active) => useEditorStore.getState().setOutline(outline, active),
@@ -245,6 +247,15 @@ export function EditorHost() {
       effects: spellcheckCompartment.reconfigure(inkSpellcheck(spellcheck)),
     })
   }, [spellcheck])
+
+  // ── 显示 / 隐藏 Markdown 标记 ──
+  const showMarkup = useSettingsStore((state) => state.settings.showMarkup)
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: concealCompartment.reconfigure(concealMarkupFacet.of(!showMarkup)),
+    })
+  }, [showMarkup])
 
   // ── 主题切换：同步 CM6 的深浅变体 ──
   const theme = useSettingsStore((state) => state.settings.theme)

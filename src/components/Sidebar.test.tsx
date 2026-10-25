@@ -88,12 +88,26 @@ describe('Sidebar（spec W2）', () => {
     expect(screen.getByText('Move to Trash')).toBeInTheDocument()
   })
 
-  it('顶部有 All Documents / Recent / Favorites 导航与 New Document 按钮', () => {
+  it('Documents 下是 All / Recent / Favorites 与数量，底部有 New Document', () => {
     render(<Sidebar />)
-    expect(screen.getByText('All Documents')).toBeInTheDocument()
+    const all = screen.getByText('All').closest('button')!
+    expect(all).toHaveAttribute('data-active', 'true')
+    expect(all.querySelector('.ink-nav-count')?.textContent).toBe(
+      String(useDocumentStore.getState().documents.length),
+    )
     expect(screen.getByText('Recent')).toBeInTheDocument()
     expect(screen.getByText('Favorites')).toBeInTheDocument()
     expect(screen.getByText('New Document')).toBeInTheDocument()
+  })
+
+  it('点 Documents 折叠 / 展开导航', () => {
+    render(<Sidebar />)
+    const section = screen.getByText('Documents').closest('button')!
+    fireEvent.click(section)
+    expect(section).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Recent')).toBeNull()
+    fireEvent.click(section)
+    expect(screen.getByText('Recent')).toBeInTheDocument()
   })
 
   it('Sidebar 隐藏时不占空间', () => {

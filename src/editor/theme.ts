@@ -34,7 +34,7 @@ export const inkThemeSpec = {
     margin: '0 auto',
     // ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%）
     padding: '16px 24px calc(50vh + 32px) 24px',
-    caretColor: 'var(--accent)',
+    caretColor: 'var(--foreground)',
   },
   '.cm-scroller': {
     overflowX: 'hidden',
@@ -64,30 +64,38 @@ export const inkThemeSpec = {
     fontSize: 'var(--ui-font-size)',
   },
   '.cm-searchMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent) 22%, transparent)',
+    backgroundColor: 'var(--highlight)',
   },
   '.cm-searchMatch.cm-searchMatch-selected': {
-    backgroundColor: 'color-mix(in srgb, var(--accent) 45%, transparent)',
+    backgroundColor: 'var(--highlight-strong)',
   },
   '.cm-placeholder': {
     color: 'var(--secondary)',
   },
 
   // ── 样式化源码（spec §2.1）──
-  '.cm-md-mark': {
+  // 排版像一本正在编辑的书：标题不靠「更黑更粗」，靠字号和前后留白的节奏区分
+  // 标记一律弱化成灰色：连同语法高亮在标记上加的颜色（任务框、表头竖线、HTML 标签）一起压掉
+  '.cm-md-mark, .cm-md-mark *': {
     color: 'var(--secondary)',
   },
+  '.cm-md-list-lead': {
+    letterSpacing: '0.35em',
+  },
   '.cm-md-heading-text': {
-    color: 'var(--accent)',
+    color: 'color-mix(in srgb, var(--foreground) 92%, var(--secondary))',
   },
   '.cm-md-url': {
     color: 'var(--secondary)',
   },
   '.cm-md-link-text': {
-    color: 'var(--accent)',
+    color: 'var(--foreground)',
+    textDecoration: 'underline',
+    textDecorationColor: 'color-mix(in srgb, var(--foreground) 30%, transparent)',
+    textUnderlineOffset: '3px',
   },
   '.cm-md-bold': {
-    fontWeight: '700',
+    fontWeight: '600',
   },
   '.cm-md-italic': {
     fontStyle: 'italic',
@@ -98,31 +106,34 @@ export const inkThemeSpec = {
   },
   '.cm-md-code': {
     fontFamily: 'var(--code-font)',
-    fontSize: '0.85em',
+    fontSize: '0.8em',
+    color: 'color-mix(in srgb, var(--foreground) 78%, var(--secondary))',
     backgroundColor: 'var(--code-bg)',
-    borderRadius: '4px',
-    padding: '0.1em 0.3em',
+    borderRadius: '2px',
+    padding: '0.15em 0.4em',
   },
   // 段间距：加在段落后的分隔空行上（没有空行时加在段落最后一行），见 styledSource 的 Paragraph
   '.cm-md-para': {
-    paddingBottom: '0.9em',
+    paddingBottom: '0.5em',
   },
+  // 18px 正文下：H1 32px / H2 21px，都是 600；标题前的留白明显大于标题后
   '.cm-md-h1': {
-    fontSize: '1.6em',
-    fontWeight: '700',
-    lineHeight: '1.3',
-    paddingTop: '1.1em',
+    fontSize: '1.78em',
+    fontWeight: '600',
+    lineHeight: '1.25',
+    letterSpacing: '-0.01em',
+    paddingTop: '0.6em',
   },
   '.cm-md-h2': {
-    fontSize: '1.35em',
-    fontWeight: '700',
-    lineHeight: '1.35',
-    paddingTop: '1.1em',
-  },
-  '.cm-md-h3': {
-    fontSize: '1.18em',
+    fontSize: '1.17em',
     fontWeight: '600',
     lineHeight: '1.4',
+    paddingTop: '1.3em',
+  },
+  '.cm-md-h3': {
+    fontSize: '1.05em',
+    fontWeight: '600',
+    lineHeight: '1.45',
     paddingTop: '1em',
   },
   '.cm-md-h4': {
@@ -140,30 +151,36 @@ export const inkThemeSpec = {
     color: 'color-mix(in srgb, var(--foreground) 70%, var(--secondary))',
   },
   '.cm-md-quote': {
-    borderLeft: '2px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-    paddingLeft: '14px',
-    color: 'color-mix(in srgb, var(--foreground) 90%, transparent)',
+    borderLeft: '2px solid var(--border)',
+    paddingLeft: '16px',
+    color: 'color-mix(in srgb, var(--foreground) 80%, var(--secondary))',
   },
   '.cm-md-hr': {
     color: 'transparent',
+  },
+  '.cm-md-hr-line': {
     background: 'linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat',
   },
+  // 代码块整行用代码字体（含 ``` 围栏行），左右留出内边距，代码不贴着底色边缘
   '.cm-md-codeblock': {
     backgroundColor: 'var(--code-bg)',
+    fontFamily: 'var(--code-font)',
+    fontSize: '0.85em',
+    paddingLeft: '16px',
+    paddingRight: '16px',
   },
   '.cm-md-codeblock-start': {
-    borderTopLeftRadius: '6px',
-    borderTopRightRadius: '6px',
+    borderTopLeftRadius: '3px',
+    borderTopRightRadius: '3px',
     paddingTop: '6px',
   },
   '.cm-md-codeblock-end': {
-    borderBottomLeftRadius: '6px',
-    borderBottomRightRadius: '6px',
+    borderBottomLeftRadius: '3px',
+    borderBottomRightRadius: '3px',
     paddingBottom: '6px',
   },
   '.cm-md-codeblock-text': {
     fontFamily: 'var(--code-font)',
-    fontSize: '0.85em',
   },
 }
 

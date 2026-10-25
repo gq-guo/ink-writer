@@ -11,14 +11,15 @@ import { useUiStore } from './uiStore'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
-  accentColor: '#007AFF',
-  fontFamily: 'quattro',
+  accentColor: '#6E756D',
+  fontFamily: 'serif',
   fontSize: 18,
-  lineHeight: 1.7,
+  lineHeight: 1.85,
   contentWidth: 680,
   libraryPath: '',
   typewriterMode: false,
   spellcheck: true,
+  showMarkup: false,
   favorites: [],
   locale: 'system',
 }
@@ -27,7 +28,8 @@ export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
   system: `-apple-system, "PingFang SC", sans-serif`,
   quattro: `"iA Writer Quattro", -apple-system, "PingFang SC", sans-serif`,
   plex: `"IBM Plex Sans", -apple-system, "PingFang SC", sans-serif`,
-  serif: `ui-serif, Georgia, "Songti SC", "Times New Roman", serif`,
+  // ui-serif = macOS 的 New York：正文有文学气质，界面仍用系统无衬线
+  serif: `ui-serif, "New York", Georgia, "Songti SC", serif`,
   mono: `"JetBrains Mono", "PingFang SC", monospace`,
 }
 
@@ -63,7 +65,7 @@ export function applySettingsToDocument(settings: AppSettings) {
   root.style.setProperty('--writing-font-size', `${settings.fontSize}px`)
   root.style.setProperty('--writing-line-height', String(settings.lineHeight))
   root.style.setProperty('--editor-max-width', `${settings.contentWidth}px`)
-  root.style.setProperty('--accent', settings.accentColor)
+  // accent 不再由设置覆盖：深浅主题各有一套（globals.css），旧版本存下的 #007AFF 也就不再生效
 }
 
 export function resolveTheme(theme: AppSettings['theme']): 'light' | 'dark' {

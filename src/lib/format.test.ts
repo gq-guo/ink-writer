@@ -20,8 +20,9 @@ describe('listTime（侧栏右侧短时间）', () => {
     expect(listTime(at(2026, 9, 20, 18, 32), false, NOW)).toBe('昨天')
   })
 
-  it('更早：同年显示月-日，跨年只显示年份', () => {
+  it('更早：同年显示月-日，跨年显示完整日期', () => {
+    expect(listTime(at(2026, 9, 18, 8, 0), true, NOW)).toBe('10-18')
     expect(listTime(at(2026, 4, 1, 8, 0), true, NOW)).toBe('05-01')
-    expect(listTime(at(2024, 4, 1, 8, 0), true, NOW)).toBe('2024')
+    expect(listTime(at(2024, 4, 1, 8, 0), true, NOW)).toBe('2024-05-01')
   })
 })

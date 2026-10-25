@@ -25,7 +25,13 @@ import type { DocumentStatistics, OutlineHeading } from '@/lib/types'
 
 import { inkSyntaxHighlighting } from './highlight'
 import { highlightCompartment } from './performance'
-import { inkStyledSourcePlugin, transientBlankLineField } from './styledSource'
+import {
+  concealCompartment,
+  concealMarkupFacet,
+  cursorEngagedField,
+  inkStyledSourcePlugin,
+  transientBlankLineField,
+} from './styledSource'
 import { focusModeField, inkFocusModePlugin } from './focusMode'
 import { typewriterModeField } from './typewriter'
 import { inkComfortScrollMargins, inkCursorCenteringPlugin, inkTypingCenteringExtender } from './centering'
@@ -38,12 +44,15 @@ import { inkDocHeader } from './docHeader'
 import { inkOutlinePlugin } from './outline'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
 import { inkSpellcheck, spellcheckCompartment } from './spellcheck'
+import { inkListKeymap } from './listKeys'
 
 export interface InkExtensionOptions {
   /** 初始是否为深色主题 */
   dark: boolean
   /** 初始是否开启拼写检查 */
   spellcheck: boolean
+  /** 初始是否显示全部 Markdown 标记（关闭时光标外的行隐藏标记） */
+  showMarkup: boolean
   /** 正文变化（每次击键都会调用） */
   onDocChanged: (update: ViewUpdate) => void
   /** 统计结果 */
@@ -89,6 +98,8 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
 
     // ── Ink 自研插件 ──
     transientBlankLineField,
+    concealCompartment.of(concealMarkupFacet.of(!options.showMarkup)),
+    cursorEngagedField,
     inkStyledSourcePlugin,
     focusModeField,
     inkFocusModePlugin,
@@ -111,6 +122,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
     placeholder('Start writing something...'),
 
     // ── 键位 ──
+    inkListKeymap,
     keymap.of([...inkEditorKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
 
     // ── 主题与外观 ──

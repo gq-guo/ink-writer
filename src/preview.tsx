@@ -37,6 +37,7 @@ const view = new EditorView({
     extensions: createInkExtensions({
       dark,
       spellcheck: false,
+      showMarkup: false,
       onDocChanged: () => {},
       onStatistics: () => {},
       onOutline: () => {},
@@ -225,7 +226,10 @@ async function renderShell(): Promise<void> {
           'Separate drafting from editing so each gets your full attention.',
         ]
       : []
-  const CONTENT = [
+  // ?doc=formats：加载 fixtures/all-formats.md，逐项核对 Markdown 全格式的渲染
+  const FORMATS =
+    params.get('doc') === 'formats' ? (await import('../fixtures/all-formats.md?raw')).default : null
+  const CONTENT = FORMATS ?? [
     ...(noH1 ? [] : ['# Hello World', '']),
     'This is my first document in Ink.',
     '',
@@ -262,6 +266,7 @@ async function renderShell(): Promise<void> {
       libraryPath: '/library',
       typewriterMode: false,
       spellcheck: true,
+      showMarkup: false,
       favorites: ['/library/Blog Post.md'],
       locale: 'system',
     },
@@ -305,6 +310,13 @@ async function renderShell(): Promise<void> {
       import('./components/DocumentOutline'),
     ])
   const { SettingsPanel } = await import('./components/SettingsPanel')
+  const { CommandPalette } = await import('./components/CommandPalette')
+  const { QuickOpen } = await import('./components/QuickOpen')
+
+  // ?overlay=palette|quickopen：打开命令面板 / Quick Open
+  const overlay = params.get('overlay')
+  if (overlay === 'palette') useUiStore.getState().showPalette()
+  if (overlay === 'quickopen') useUiStore.getState().showQuickOpen()
 
   // ?toast=1：放一条示例提示，检查 toast 的位置与层级
   if (params.get('toast') === '1') {
@@ -341,8 +353,15 @@ async function renderShell(): Promise<void> {
       React.createElement(Toast),
       // ?settings=1：打开设置面板，检查尺寸与位置
       params.get('settings') === '1' ? React.createElement(SettingsPanel) : null,
+      overlay === 'palette' ? React.createElement(CommandPalette) : null,
+      overlay === 'quickopen' ? React.createElement(QuickOpen) : null,
     ),
   )
+
+  // ?reveal=1：模拟鼠标移到窗口顶部，显示默认隐藏的顶栏工具
+  if (params.get('reveal') === '1') {
+    setTimeout(() => window.dispatchEvent(new MouseEvent('mousemove', { clientX: 600, clientY: 10 })), 300)
+  }
 }
 
 if (params.get('shell') === '1') {
