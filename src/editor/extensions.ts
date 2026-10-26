@@ -14,7 +14,6 @@ import {
   drawSelection,
   dropCursor,
   keymap,
-  placeholder,
   rectangularSelection,
   type KeyBinding,
 } from '@codemirror/view'
@@ -37,6 +36,8 @@ import { typewriterModeField } from './typewriter'
 import { inkComfortScrollMargins, inkCursorCenteringPlugin, inkTypingCenteringExtender } from './centering'
 import { inkStatisticsPlugin } from './statistics'
 import { makeSearchPhrases, searchPhrasesCompartment } from './searchPhrases'
+import { makePlaceholder, placeholderCompartment } from './placeholder'
+import { useLocaleStore } from '@/lib/i18n'
 import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
 import { inkLinkHandler } from './links'
@@ -92,7 +93,8 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
 
     // ── 搜索 ──
     search({ top: true }),
-    searchPhrasesCompartment.of(makeSearchPhrases('zh-CN')),
+    // 按当前界面语言初始化；之后语言切换、切换文档时由 EditorHost 重配
+    searchPhrasesCompartment.of(makeSearchPhrases(useLocaleStore.getState().locale)),
     inkSearchPanelPlugin,
     highlightSelectionMatches(),
 
@@ -119,7 +121,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
     }),
     inkDocHeader,
     inkOutlinePlugin(options.onOutline),
-    placeholder('Start writing something...'),
+    placeholderCompartment.of(makePlaceholder(useLocaleStore.getState().locale)),
 
     // ── 键位 ──
     inkListKeymap,

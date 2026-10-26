@@ -47,6 +47,22 @@ describe('EditorHost 切换语言', () => {
 
     expect(view!.state.doc.toString()).toBe('hello world')
   })
+
+  it('切换语言后再打开别的文档：占位提示仍是当前语言（切换文档会整体替换 EditorState）', async () => {
+    syncLocale('zh-CN')
+    useDocumentStore.setState({ activeDocument: { ...DOC, content: '', openSeq: 10 }, saveState: 'idle' })
+    const { container } = render(<EditorHost />)
+    await waitFor(() => expect(container.querySelector('.cm-placeholder')?.textContent).toBe('开始写作…'))
+
+    act(() => syncLocale('en'))
+    await waitFor(() => expect(container.querySelector('.cm-placeholder')?.textContent).toBe('Start writing…'))
+
+    act(() => {
+      useDocumentStore.setState({ activeDocument: { ...DOC, path: '/library/Other.md', content: '', openSeq: 11 } })
+    })
+    await waitFor(() => expect(container.querySelector('.cm-placeholder')?.textContent).toBe('Start writing…'))
+    syncLocale('zh-CN')
+  })
 })
 
 async function mountEditor(): Promise<{ view: EditorView; container: HTMLElement }> {

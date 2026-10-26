@@ -12,6 +12,7 @@ import { setFocusModeEffect } from '@/editor/focusMode'
 import { darkCompartment, inkDarkExtension } from '@/editor/theme'
 import { runCenteringSelfTest } from '@/editor/selftest'
 import { makeSearchPhrases, searchPhrasesCompartment } from '@/editor/searchPhrases'
+import { makePlaceholder, placeholderCompartment } from '@/editor/placeholder'
 import { inkSpellcheck, spellcheckCompartment } from '@/editor/spellcheck'
 import { concealCompartment, concealMarkupFacet } from '@/editor/styledSource'
 import { useLocaleStore } from '@/lib/i18n'
@@ -230,14 +231,18 @@ export function EditorHost() {
     }
   }, [performanceMode, t])
 
-  // ── 语言切换：同步查找面板的文案 ──
+  // ── 语言切换：同步查找面板与空文档占位的文案 ──
   const locale = useLocaleStore((state) => state.locale)
 
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
+      effects: [
+        searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
+        placeholderCompartment.reconfigure(makePlaceholder(locale)),
+      ],
     })
-  }, [locale])
+    // openSeq：切换文档会整体替换 EditorState，compartment 回到创建时的值，需要重新推送
+  }, [locale, openSeq])
 
   // ── 拼写检查开关 ──
   const spellcheck = useSettingsStore((state) => state.settings.spellcheck)
@@ -320,16 +325,5 @@ export function EditorHost() {
     // openSeq：切换文档会整体替换 EditorState，需要重新推送
   }, [headerKey, openSeq])
 
-  const hasContent = useEditorStore((state) => state.hasContent)
-
-  return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
-      {!hasContent ? (
-        <div className="ink-empty-guide">
-          <div className="ink-empty-title">{t('empty.start')}</div>
-          <div className="ink-empty-sub">{t('empty.firstThought')}</div>
-        </div>
-      ) : null}
-    </div>
-  )
+  return <div ref={containerRef} className="relative h-full w-full overflow-hidden" />
 }

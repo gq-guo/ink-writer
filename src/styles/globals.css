@@ -1694,31 +1694,6 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
    空文档引导（效果图 2 · 主界面）
    ========================================================================== */
 
-.ink-empty-guide {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.ink-empty-title {
-  font-size: 26px;
-  font-weight: 600;
-  color: var(--secondary);
-  letter-spacing: -0.01em;
-}
-
-.ink-empty-sub {
-  font-size: 13px;
-  color: var(--secondary);
-  opacity: 0.8;
-}
-
 /* ==========================================================================
    Toast
    ========================================================================== */
