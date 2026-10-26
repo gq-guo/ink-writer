@@ -1,11 +1,11 @@
 /**
  * Sidebar（spec W2）
  *
- * 不做「软件 UI」式的蓝色选中块，靠排版层级和一道细墨线区分状态：
- * - 顶部：墨色羽毛 + Ink（折叠用正文左下角的按钮或 ⌥\）
- * - 导航：Documents 之下缩进的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
- * - 分组：TODAY / YESTERDAY / LAST 7 DAYS / EARLIER
- * - 条目：单行，文档图标 + 标题 + 收藏星标 + 右对齐的短时间；当前文档左侧一道细墨线
+ * 所有内容共用一条左边缘；当前项是一块很淡的圆角底色，不用彩色选中块：
+ * - 顶部：只有一个安静的 Ink 字标，不配图标（折叠用正文左下角的按钮或 ⌥\）
+ * - 导航：Documents 之下的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
+ * - 分组：Today / Yesterday / Last 7 days / Earlier，小号淡色，不做全大写
+ * - 条目：单行，标题 + 收藏星标 + 右对齐的短时间；不加文档图标
  * - 底部：+ New Document
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -163,7 +163,6 @@ export function Sidebar() {
             setContextMenu({ x: event.clientX, y: event.clientY, document })
           }}
         >
-          <span className="ink-icon ink-icon-file ink-doc-icon" aria-hidden />
           {isRenaming ? (
             <input
               ref={renameInputRef}
@@ -197,7 +196,6 @@ export function Sidebar() {
   return (
     <aside className="ink-sidebar relative" data-hidden={hidden} aria-hidden={hidden}>
       <div className="ink-sidebar-head">
-        <span className="ink-icon ink-icon-feather ink-brand" aria-hidden />
         <span className="ink-brand-name">Ink</span>
       </div>
 
@@ -207,7 +205,6 @@ export function Sidebar() {
           aria-expanded={navOpen}
           onClick={() => setNavOpen((open) => !open)}
         >
-          <span className="ink-icon ink-icon-file" aria-hidden />
           {t('sidebar.documents')}
           <span className="ink-icon ink-icon-chevron" data-open={navOpen} aria-hidden />
         </button>

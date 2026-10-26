@@ -10,6 +10,7 @@ mod fs_ops;
 mod open_requests;
 mod search;
 mod watcher;
+mod window_theme;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -565,6 +566,9 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+            // 主窗口在这里带着主题底色创建（tauri.conf.json 中 create = false），避免冷启动白闪
+            window_theme::create_main_window(app)?;
 
             let handle = app.handle().clone();
             watcher::create_watcher(&handle).map_err(std::io::Error::other)?;

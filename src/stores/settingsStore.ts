@@ -4,8 +4,9 @@
  * settingsStore 是唯一写磁盘的 store：字段变更 → debounce 300ms → 落盘。
  */
 import { create } from 'zustand'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import type { AppSettings } from '@/lib/types'
-import { loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
+import { isTauriRuntime, loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
 import { resolveLocale, syncLocale, t, type Locale } from '@/lib/i18n'
 import { useUiStore } from './uiStore'
 
@@ -14,7 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: '#6E756D',
   fontFamily: 'serif',
   fontSize: 18,
-  lineHeight: 1.85,
+  lineHeight: 1.75,
   contentWidth: 680,
   libraryPath: '',
   typewriterMode: false,
@@ -27,7 +28,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
   system: `-apple-system, "PingFang SC", sans-serif`,
   quattro: `"iA Writer Quattro", -apple-system, "PingFang SC", sans-serif`,
-  plex: `"IBM Plex Sans", -apple-system, "PingFang SC", sans-serif`,
   // ui-serif = macOS 的 New York：正文有文学气质，界面仍用系统无衬线
   serif: `ui-serif, "New York", Georgia, "Songti SC", serif`,
   // 内置：拉丁用 Ink Serif Text（Source Serif 4，有真斜体），中文用 Noto Serif SC；表外生僻字回落宋体
@@ -35,6 +35,16 @@ export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
   // 内置：霞鹜文楷自带拉丁字形，中英同一种手写气质；表外生僻字回落系统楷体
   wenkai: `"Ink LXGW WenKai", "Kaiti SC", "STKaiti", serif`,
   mono: `"JetBrains Mono", "PingFang SC", monospace`,
+}
+
+/**
+ * 读回旧设置里的字体：已移除的选项不能原样留着（FONT_STACKS 里查不到会让正文字体失效）。
+ * plex 从未内置 IBM Plex Sans，用户实际看到的就是系统字体，所以迁到 system；
+ * 其余未知值回到默认。
+ */
+export function normalizeFontFamily(value: unknown): AppSettings['fontFamily'] {
+  if (typeof value === 'string' && Object.hasOwn(FONT_STACKS, value)) return value as AppSettings['fontFamily']
+  return value === 'plex' ? 'system' : DEFAULT_SETTINGS.fontFamily
 }
 
 export const FONT_SIZE_RANGE = { min: 14, max: 24 } as const
@@ -92,13 +102,52 @@ const THEME_TRANSITION_MS = 320
 let themeTransitionTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
+ * 主题偏好的同步缓存：public/theme-boot.js 在第一帧之前读它（设置本身要经 Rust 异步读回，来不及）。
+ * 存的是偏好（light / dark / system），跟随系统时由启动脚本自己查 prefers-color-scheme。
+ */
+export const THEME_BOOT_KEY = 'ink:theme'
+
+function rememberThemeForBoot(theme: AppSettings['theme']) {
+  try {
+    window.localStorage.setItem(THEME_BOOT_KEY, theme)
+  } catch {
+    /* 存不了就退回跟随系统，不影响当前页面 */
+  }
+}
+
+/**
+ * 原生窗口 / webview 的底色跟随主题：刷新时页面先清空，露出的是 webview 底色（默认白色），
+ * 深色模式下就是一次白闪。设置一次后在同一窗口内跨刷新保留。
+ */
+function syncNativeBackground() {
+  if (!isTauriRuntime()) return
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--background').trim()
+  if (!color) return
+  try {
+    void getCurrentWebviewWindow()
+      .setBackgroundColor(color)
+      .catch(() => {})
+  } catch {
+    /* 窗口句柄不可用（测试环境等）时忽略 */
+  }
+}
+
+/**
  * 把主题写到 <html data-theme>。animate：用户切换 / 系统外观变化时做一次颜色过渡；
  * 启动时不做（否则首屏会从默认色渐变过来）。
  */
 export function applyThemeToDocument(theme: AppSettings['theme'], options?: { animate?: boolean }) {
   const root = document.documentElement
   const next = resolveTheme(theme)
-  if (root.getAttribute('data-theme') === next) return
+  rememberThemeForBoot(theme)
+  // theme-boot.js 铺的临时底色与 color-scheme 交还给样式表
+  root.style.removeProperty('background-color')
+  root.style.removeProperty('color-scheme')
+  if (root.getAttribute('data-theme') === next) {
+    // 启动脚本已经设对了 data-theme：仍要同步原生底色（这次进程里还没设过）
+    syncNativeBackground()
+    return
+  }
   if (options?.animate && root.hasAttribute('data-theme')) {
     root.classList.add('ink-theme-transition')
     if (themeTransitionTimer) clearTimeout(themeTransitionTimer)
@@ -108,6 +157,7 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
     }, THEME_TRANSITION_MS)
   }
   root.setAttribute('data-theme', next)
+  syncNativeBackground()
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -125,6 +175,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...DEFAULT_SETTINGS,
       ...stored,
       ...(library ? { libraryPath: library.exists ? (library.path ?? '') : '' } : {}),
+      fontFamily: normalizeFontFamily(stored.fontFamily),
       fontSize: clamp(stored.fontSize ?? DEFAULT_SETTINGS.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max),
       lineHeight: clamp(stored.lineHeight ?? DEFAULT_SETTINGS.lineHeight, 1.4, 2.0),
       contentWidth: clamp(stored.contentWidth ?? DEFAULT_SETTINGS.contentWidth, 560, 960),
