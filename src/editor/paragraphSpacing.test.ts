@@ -118,7 +118,7 @@ describe('段落间距（点击定位正确性的前提）', () => {
 
   it('段间距用 padding 实现（属于行盒，CM6 能正确测量）', () => {
     const para = inkThemeSpec['.cm-md-para'] as Record<string, unknown>
-    expect(para.paddingBottom).toBe('0.5em')
+    expect(para.paddingBottom).toBe('0.3em')
     expect(para.marginBottom).toBeUndefined()
   })
 })
