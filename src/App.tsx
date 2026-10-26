@@ -25,6 +25,7 @@ import { scheduleUpdateCheck } from '@/lib/updater'
 import { WindowDragRegion } from '@/components/WindowDragRegion'
 import { installSidebarWidthFreeze } from '@/lib/sidebarAnimation'
 import { installAppMenu } from '@/lib/appMenu'
+import { installCloseGuard } from '@/lib/quit'
 import { openRequestedFiles } from '@/lib/openRequests'
 import { readPersisted, writePersisted } from '@/lib/persist'
 import { pickStartupDocument } from '@/lib/startupDocument'
@@ -166,7 +167,10 @@ export default function App() {
   // ── 侧栏展开 / 收起动画期间锁定正文列宽 ──
   useEffect(() => installSidebarWidthFreeze(), [])
 
-  // ── 失焦 / 退出前落盘 ──
+  // ── 关窗（⌘W / 红色按钮）前落盘，没存上就不关 ──
+  useEffect(() => installCloseGuard(), [])
+
+  // ── 失焦 / 刷新前落盘 ──
   useEffect(() => {
     const flush = () => void useDocumentStore.getState().flushSave()
     window.addEventListener('blur', flush)

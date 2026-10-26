@@ -26,9 +26,9 @@ pub struct SearchHit {
     pub dir_prefix: String,
     pub line: usize,
     pub snippet: String,
-    /// 命中词在文件中的字节偏移
+    /// 命中词在文件中的起始位置（UTF-16 偏移，即 CodeMirror 的 position）
     pub start: usize,
-    /// 命中词结束位置（字节偏移）
+    /// 命中词结束位置（UTF-16 偏移）
     pub end: usize,
 }
 
@@ -55,6 +55,18 @@ fn find_ci(haystack: &[char], needle: &[char]) -> Option<usize> {
         }
     }
     None
+}
+
+fn utf16_len(chars: &[char]) -> usize {
+    chars.iter().map(|c| c.len_utf16()).sum()
+}
+
+/// 行内第 `pos` 个字符起、长 `len` 个字符的区间，换算成 UTF-16 偏移
+/// （CodeMirror 的位置单位；按 UTF-8 字节算的话中文会偏到三倍远）
+fn utf16_range(chars: &[char], pos: usize, len: usize) -> (usize, usize) {
+    let start = utf16_len(&chars[..pos]);
+    let end = start + utf16_len(&chars[pos..(pos + len).min(chars.len())]);
+    (start, end)
 }
 
 fn snippet_for(line: &str, char_index: usize, needle_len: usize) -> String {
@@ -94,32 +106,26 @@ pub fn search_content(root: &Path, query: &str) -> Result<Vec<SearchHit>, Comman
         let text = encoding::normalize_to_lf(&decoded.text);
 
         let mut per_file = 0;
-        let mut byte_offset = 0usize;
+        let mut line_start = 0usize;
         for (index, line) in text.lines().enumerate() {
             if per_file >= MAX_HITS_PER_FILE {
                 break;
             }
-            let line_start = byte_offset;
-            byte_offset += line.len() + 1;
             let chars: Vec<char> = line.chars().collect();
             if let Some(pos) = find_ci(&chars, &needle) {
-                let byte_in_line = line
-                    .char_indices()
-                    .nth(pos)
-                    .map(|(offset, _)| offset)
-                    .unwrap_or(0);
-                let matched: String = chars.iter().skip(pos).take(needle.len()).collect();
+                let (start, end) = utf16_range(&chars, pos, needle.len());
                 hits.push(SearchHit {
                     path: doc.path.clone(),
                     file_name: doc.file_name.clone(),
                     dir_prefix: doc.dir_prefix.clone(),
                     line: index + 1,
                     snippet: snippet_for(line, pos, needle.len()),
-                    start: line_start + byte_in_line,
-                    end: line_start + byte_in_line + matched.len(),
+                    start: line_start + start,
+                    end: line_start + end,
                 });
                 per_file += 1;
             }
+            line_start += utf16_len(&chars) + 1;
         }
     }
 
@@ -135,6 +141,22 @@ mod tests {
         let hay: Vec<char> = "Hello World".chars().collect();
         let needle: Vec<char> = "world".chars().collect();
         assert_eq!(find_ci(&hay, &needle), Some(6));
+    }
+
+    #[test]
+    fn offsets_are_utf16_code_units() {
+        let dir = std::env::temp_dir().join(format!("ink-search-utf16-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let text = "第一行\n中文 😀 关键词 here";
+        fs::write(dir.join("a.md"), text).unwrap();
+
+        let hits = search_content(&dir, "关键词").unwrap();
+        assert_eq!(hits.len(), 1);
+        let utf16: Vec<u16> = text.encode_utf16().collect();
+        let found = String::from_utf16(&utf16[hits[0].start..hits[0].end]).unwrap();
+        assert_eq!(found, "关键词");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

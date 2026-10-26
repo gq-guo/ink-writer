@@ -96,10 +96,36 @@ th { background: var(--code-bg); }
 `
 }
 
+/** 导出页里允许的链接协议；相对路径（assets/x.png、#标题）不带协议，也放行 */
+const SAFE_PROTOCOLS = new Set(['http', 'https', 'mailto'])
+
+interface UrlNode {
+  url?: string
+  children?: UrlNode[]
+}
+
+/** `[x](javascript:…)` 在 app 里有 CSP 挡着，导出的 HTML 在浏览器里打开就没有了：去掉危险协议 */
+export function isSafeUrl(url: string): boolean {
+  // 浏览器解析前会删掉 tab / 换行等控制字符：`java\tscript:` 也算 javascript:
+  // eslint-disable-next-line no-control-regex -- 匹配控制字符正是目的
+  const compact = url.replace(/[\u0000-\u0020]/g, '')
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(compact)
+  return !scheme || SAFE_PROTOCOLS.has(scheme[1]!.toLowerCase())
+}
+
+function stripUnsafeUrls() {
+  const walk = (node: UrlNode) => {
+    if (typeof node.url === 'string' && !isSafeUrl(node.url)) node.url = ''
+    node.children?.forEach(walk)
+  }
+  return (tree: object) => walk(tree as UrlNode)
+}
+
 export function markdownToHtml(markdown: string): string {
   const file = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(stripUnsafeUrls)
     .use(remarkRehype)
     .use(rehypeStringify)
     .processSync(markdown)

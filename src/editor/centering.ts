@@ -94,19 +94,23 @@ export const inkCursorCenteringPlugin = ViewPlugin.fromClass(
     view: EditorView
     private frame: number | null = null
 
+    private readonly markManualScroll = () => {
+      lastManualScroll = Date.now()
+    }
+
     constructor(view: EditorView) {
       this.view = view
-      const mark = () => {
-        lastManualScroll = Date.now()
-      }
-      view.scrollDOM.addEventListener('wheel', mark, { passive: true })
-      view.scrollDOM.addEventListener('touchmove', mark, { passive: true })
+      view.scrollDOM.addEventListener('wheel', this.markManualScroll, { passive: true })
+      view.scrollDOM.addEventListener('touchmove', this.markManualScroll, { passive: true })
     }
 
     private destroyed = false
 
     destroy() {
       this.destroyed = true
+      // 每次切换文档都会重建插件实例，不摘掉的话监听器会一直累积在同一个 scrollDOM 上
+      this.view.scrollDOM.removeEventListener('wheel', this.markManualScroll)
+      this.view.scrollDOM.removeEventListener('touchmove', this.markManualScroll)
       if (this.frame !== null) cancelAnimationFrame(this.frame)
     }
 

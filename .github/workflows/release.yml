@@ -18,9 +18,15 @@ jobs:
       - name: Tag matches version files
         run: sh scripts/check-version.sh "${GITHUB_REF_NAME}"
       - name: Updater public key is set
+        # pubkey 是 base64 的 minisign 公钥，解出来以 "untrusted comment:" 开头
         run: |
-          if grep -q dW50cnJ1c3RlZCBjb21tZW50 src-tauri/tauri.conf.json && ! grep -q '"updater"' src-tauri/tauri.conf.json; then
-            echo "::error::plugins.updater missing in tauri.conf.json"
+          pubkey=$(jq -r '.plugins.updater.pubkey // empty' src-tauri/tauri.conf.json)
+          if [ -z "$pubkey" ] || ! printf '%s' "$pubkey" | base64 -d 2>/dev/null | grep -q '^untrusted comment: minisign public key'; then
+            echo "::error::plugins.updater.pubkey in tauri.conf.json is missing or not a minisign public key"
+            exit 1
+          fi
+          if [ -z "$(jq -r '.plugins.updater.endpoints[0] // empty' src-tauri/tauri.conf.json)" ]; then
+            echo "::error::plugins.updater.endpoints is empty"
             exit 1
           fi
       - uses: pnpm/action-setup@v4

@@ -37,6 +37,9 @@ export const focusModeField = StateField.define<boolean>({
 
 /** 重算防抖（spec §9.3） */
 const RECOMPUTE_DEBOUNCE_MS = 100
+/** 语法树还没解析到可见区：每 30ms 再算一次，最多这么多次 */
+const PARSE_RETRY_MS = 30
+const MAX_PARSE_RETRIES = 50
 
 /** 取得光标所在的最外层块 */
 export function topLevelBlockAt(tree: Tree, pos: number): SyntaxNode | null {
@@ -141,6 +144,7 @@ export const inkFocusModePlugin = ViewPlugin.fromClass(
     decorations: DecorationSet
     view: EditorView
     private timer: ReturnType<typeof setTimeout> | null = null
+    private parseRetries = 0
 
     constructor(view: EditorView) {
       this.view = view
@@ -184,21 +188,28 @@ export const inkFocusModePlugin = ViewPlugin.fromClass(
       }
     }
 
-    private recompute(view: EditorView) {
+    private recompute(view: EditorView, retry = false) {
       if (this.timer) {
         clearTimeout(this.timer)
         this.timer = null
       }
-      this.decorations = computeFocusDecorations(
-        view.state,
-        paddedVisibleRanges(view, focusPadLines(view.state.doc.length)),
-      )
-      if (!syntaxTreeAvailable(view.state)) {
+      if (!retry) this.parseRetries = 0
+      const ranges = paddedVisibleRanges(view, focusPadLines(view.state.doc.length))
+      this.decorations = computeFocusDecorations(view.state, ranges)
+      // 只等「可见区」的语法树：CM6 后台只解析到视口后约 10 万字符，
+      // 等整篇解析完的话长文永远等不到，会每 30ms 空转一次
+      const upto = ranges.length > 0 ? ranges[ranges.length - 1]!.to : 0
+      if (
+        view.state.field(focusModeField, false) &&
+        !syntaxTreeAvailable(view.state, upto) &&
+        this.parseRetries < MAX_PARSE_RETRIES
+      ) {
+        this.parseRetries += 1
         this.timer = setTimeout(() => {
           this.timer = null
-          this.recompute(this.view)
+          this.recompute(this.view, true)
           this.view.dispatch({ effects: refreshFocusEffect.of(null) })
-        }, 30)
+        }, PARSE_RETRY_MS)
       }
     }
 
