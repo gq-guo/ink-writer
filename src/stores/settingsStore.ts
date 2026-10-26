@@ -139,9 +139,6 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
   const root = document.documentElement
   const next = resolveTheme(theme)
   rememberThemeForBoot(theme)
-  // theme-boot.js 铺的临时底色与 color-scheme 交还给样式表
-  root.style.removeProperty('background-color')
-  root.style.removeProperty('color-scheme')
   // 偏好变了就同步（比如 dark → system 而系统正好是深色：data-theme 不变，但窗口外观要交还给系统）
   syncNativeTheme(theme)
   if (root.getAttribute('data-theme') === next) return
@@ -154,6 +151,38 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
     }, THEME_TRANSITION_MS)
   }
   root.setAttribute('data-theme', next)
+  // theme-boot.js 铺的临时底色还在（主界面还没渲染出来）：跟着换成新主题的颜色，收回见 releaseBootBackground
+  if (root.style.backgroundColor) {
+    // 样式表还没加载时读不到变量，保持原样，不能把临时底色清掉
+    const background = getComputedStyle(root).getPropertyValue('--background').trim()
+    if (background) root.style.backgroundColor = background
+    root.style.colorScheme = next
+  }
+}
+
+/** 淡出临时底色的时长：侧栏的材质慢慢透出来，而不是一下子从纸色跳成半透明 */
+const BOOT_BACKGROUND_FADE_MS = 180
+
+/**
+ * 收回 theme-boot.js 在 <html> 上铺的临时底色，交还给样式表。
+ * 要等主界面真正画出来再收：半透明侧栏下 body 是透明的，太早收回会露出整窗的系统材质（灰的一闪）。
+ * 由 App 里随主界面一起挂载的 BootBackgroundRelease 调用。
+ */
+export function releaseBootBackground() {
+  const root = document.documentElement
+  const clear = () => {
+    root.style.removeProperty('background-color')
+    root.style.removeProperty('color-scheme')
+    root.style.removeProperty('transition')
+  }
+  if (!root.style.backgroundColor) return
+  if (root.dataset.vibrancy !== 'true') {
+    clear()
+    return
+  }
+  root.style.transition = `background-color ${BOOT_BACKGROUND_FADE_MS}ms ease-out`
+  root.style.backgroundColor = 'transparent'
+  setTimeout(clear, BOOT_BACKGROUND_FADE_MS + 40)
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

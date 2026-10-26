@@ -320,3 +320,19 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     expect(readPaths).toEqual(['/Users/me/Desktop/Outside.md'])
   })
 })
+
+describe('启动临时底色', () => {
+  it('主界面渲染出来之后才收回 theme-boot.js 铺的底色', async () => {
+    invokeMock.mockReset()
+    invokeMock.mockResolvedValue(undefined)
+    window.localStorage.clear()
+    window.localStorage.setItem('ink:settings', JSON.stringify({ locale: 'zh-CN' }))
+    const root = document.documentElement
+    root.style.backgroundColor = '#faf9f6'
+    render(<App />)
+    // 引导页渲染出来之前底色一直在
+    expect(root.style.backgroundColor).not.toBe('')
+    await waitFor(() => expect(screen.getByText('Ink.')).toBeInTheDocument())
+    await waitFor(() => expect(root.style.backgroundColor).toBe(''))
+  })
+})

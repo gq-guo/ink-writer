@@ -6,7 +6,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const { setThemeMock } = vi.hoisted(() => ({ setThemeMock: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ setTheme: setThemeMock }) }))
 
-import { applyThemeToDocument, THEME_BOOT_KEY } from '@/stores/settingsStore'
+import { applyThemeToDocument, releaseBootBackground, THEME_BOOT_KEY } from '@/stores/settingsStore'
 
 const BOOT_SCRIPT = readFileSync(resolve(__dirname, '../../public/theme-boot.js'), 'utf-8')
 const GLOBALS_CSS = readFileSync(resolve(__dirname, '../styles/globals.css'), 'utf-8')
@@ -76,14 +76,18 @@ describe('theme-boot.js：首帧前定好深浅色', () => {
     expect(BOOT_SCRIPT).toContain(`dark: '${dark}'`)
   })
 
-  it('applyThemeToDocument 记下偏好供下次启动用，并收回临时底色', () => {
+  it('applyThemeToDocument 记下偏好供下次启动用；临时底色留到主界面画出来再收', () => {
     mockSystemDark(false)
     window.localStorage.setItem(THEME_BOOT_KEY, 'dark')
     runBootScript()
     applyThemeToDocument('dark')
     expect(window.localStorage.getItem(THEME_BOOT_KEY)).toBe('dark')
-    expect(root.style.backgroundColor).toBe('')
+    expect(root.style.backgroundColor).toBe('rgb(27, 26, 24)')
     expect(root.dataset.theme).toBe('dark')
+
+    releaseBootBackground()
+    expect(root.style.backgroundColor).toBe('')
+    expect(root.style.colorScheme).toBe('')
 
     applyThemeToDocument('system')
     expect(window.localStorage.getItem(THEME_BOOT_KEY)).toBe('system')
@@ -109,14 +113,30 @@ describe('macOS 半透明侧栏（data-vibrancy）', () => {
     window.localStorage.clear()
   })
 
-  it('Mac 上的 App：标 data-vibrancy，且不铺不透明底色（让材质透出来）', () => {
+  it('Mac 上的 App：标 data-vibrancy，也先铺底色（主界面出来前不露出整窗灰色材质）', () => {
     setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
     window.localStorage.setItem(THEME_BOOT_KEY, 'dark')
     runBootScript()
     expect(root.dataset.vibrancy).toBe('true')
     expect(root.dataset.theme).toBe('dark')
-    expect(root.style.backgroundColor).toBe('')
+    expect(root.style.backgroundColor).toBe('rgb(27, 26, 24)')
+  })
+
+  it('半透明侧栏下收回底色是淡出到透明，再交还样式表', () => {
+    vi.useFakeTimers()
+    try {
+      root.setAttribute('data-vibrancy', 'true')
+      root.style.backgroundColor = '#1b1a18'
+      releaseBootBackground()
+      expect(root.style.backgroundColor).toBe('transparent')
+      expect(root.style.transition).toContain('background-color')
+      vi.advanceTimersByTime(300)
+      expect(root.style.backgroundColor).toBe('')
+      expect(root.style.transition).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('浏览器里（没有 Tauri）：不标 data-vibrancy，照常铺底色', () => {
