@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: '#6E756D',
   fontFamily: 'serif',
   fontSize: 18,
-  lineHeight: 1.85,
+  lineHeight: 1.75,
   contentWidth: 680,
   libraryPath: '',
   typewriterMode: false,
