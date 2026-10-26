@@ -7,6 +7,11 @@ import type { DocumentStatistics, ExternalConflict, OutlineHeading } from '@/lib
 export interface UpdateInfo {
   version: string
   body: string
+  /** idle：等用户确认；downloading / installing：进行中；failed：可重试；
+   *  unsaved：已装好，但当前文档没存上，先不重启 */
+  status: 'idle' | 'downloading' | 'installing' | 'failed' | 'unsaved'
+  /** 下载进度 0–1；服务器没给总长度时为 null */
+  progress: number | null
 }
 import { EMPTY_STATISTICS } from '@/lib/statistics'
 
@@ -17,6 +22,7 @@ interface EditorState {
   /** 发现的新版本（非 null 时弹出更新对话框） */
   updateInfo: UpdateInfo | null
   setUpdateInfo: (info: UpdateInfo) => void
+  patchUpdateInfo: (patch: Partial<UpdateInfo>) => void
   clearUpdateInfo: () => void
   /** 当前文档是否有内容（驱动「Start writing.」引导的显隐；正文权威在 CM6，
    *  activeDocument.content 只是打开时的快照，不能用它判断） */
@@ -57,5 +63,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setTyping: (typing) => set((s) => (s.typing === typing ? s : { typing })),
   setOutline: (outline, outlineActive) => set({ outline, outlineActive }),
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
+  patchUpdateInfo: (patch) =>
+    set((state) => (state.updateInfo ? { updateInfo: { ...state.updateInfo, ...patch } } : {})),
   clearUpdateInfo: () => set({ updateInfo: null }),
 }))
