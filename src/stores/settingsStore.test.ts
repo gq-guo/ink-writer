@@ -65,6 +65,41 @@ describe('settingsStore.hydrate 的文档库来源', () => {
   })
 })
 
+describe('settingsStore.hydrate 的字体迁移', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+  })
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  })
+
+  async function hydrateWith(fontFamily: unknown) {
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_library') return { path: '/lib', exists: true }
+      if (command === 'load_persisted' && args?.key === 'settings') return { fontFamily }
+      return null
+    })
+    const { settingsStore } = await loadStores()
+    await settingsStore.getState().hydrate()
+    return settingsStore.getState().settings.fontFamily
+  }
+
+  it('已移除的 plex 迁到 system（从未内置 IBM Plex，用户实际看到的就是系统字体）', async () => {
+    expect(await hydrateWith('plex')).toBe('system')
+  })
+
+  it('未知值与原型上的键都回到默认字体', async () => {
+    expect(await hydrateWith('comic-sans')).toBe('serif')
+    expect(await hydrateWith('toString')).toBe('serif')
+  })
+
+  it('仍然存在的选项原样保留', async () => {
+    expect(await hydrateWith('quattro')).toBe('quattro')
+  })
+})
+
 describe('主题切换', () => {
   afterEach(() => {
     vi.useRealTimers()
