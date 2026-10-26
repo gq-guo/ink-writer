@@ -1,6 +1,7 @@
 //! 正文搜索（spec §14.2）
 //!
 //! 不建索引（R9）：逐文件做大小写不敏感子串匹配，每文件最多 3 条命中，全库最多 50 条。
+//! 返回的位置是 UTF-16 偏移（与编辑器的文档位置一致），不是字节偏移。
 use std::fs;
 use std::path::Path;
 
@@ -26,9 +27,9 @@ pub struct SearchHit {
     pub dir_prefix: String,
     pub line: usize,
     pub snippet: String,
-    /// 命中词在文件中的字节偏移
+    /// 命中词在文档中的起点，UTF-16 偏移（换行已统一为 LF）
     pub start: usize,
-    /// 命中词结束位置（字节偏移）
+    /// 命中词结束位置，UTF-16 偏移
     pub end: usize,
 }
 
@@ -94,13 +95,13 @@ pub fn search_content(root: &Path, query: &str) -> Result<Vec<SearchHit>, Comman
         let text = encoding::normalize_to_lf(&decoded.text);
 
         let mut per_file = 0;
-        let mut byte_offset = 0usize;
+        let mut utf16_offset = 0usize;
         for (index, line) in text.lines().enumerate() {
             if per_file >= MAX_HITS_PER_FILE {
                 break;
             }
-            let line_start = byte_offset;
-            byte_offset += line.len() + 1;
+            let line_start = utf16_offset;
+            utf16_offset += line.encode_utf16().count() + 1;
             let chars: Vec<char> = line.chars().collect();
             if let Some(pos) = find_ci(&chars, &needle) {
                 let byte_in_line = line
@@ -109,14 +110,15 @@ pub fn search_content(root: &Path, query: &str) -> Result<Vec<SearchHit>, Comman
                     .map(|(offset, _)| offset)
                     .unwrap_or(0);
                 let matched: String = chars.iter().skip(pos).take(needle.len()).collect();
+                let start = line_start + line[..byte_in_line].encode_utf16().count();
                 hits.push(SearchHit {
                     path: doc.path.clone(),
                     file_name: doc.file_name.clone(),
                     dir_prefix: doc.dir_prefix.clone(),
                     line: index + 1,
                     snippet: snippet_for(line, pos, needle.len()),
-                    start: line_start + byte_in_line,
-                    end: line_start + byte_in_line + matched.len(),
+                    start,
+                    end: start + matched.encode_utf16().count(),
                 });
                 per_file += 1;
             }
@@ -135,6 +137,24 @@ mod tests {
         let hay: Vec<char> = "Hello World".chars().collect();
         let needle: Vec<char> = "world".chars().collect();
         assert_eq!(find_ci(&hay, &needle), Some(6));
+    }
+
+    #[test]
+    fn hit_positions_are_utf16_offsets() {
+        let root = std::env::temp_dir().join(format!("ink-search-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        // CRLF 与中文 / emoji：编辑器里换行是一个字符，😀 占两个 UTF-16 单元
+        let text = "第一行\r\n😀 中文 Ink 写作\r\n";
+        fs::write(root.join("a.md"), text).unwrap();
+
+        let hits = search_content(&root, "写作").unwrap();
+        assert_eq!(hits.len(), 1);
+        let editor_text: Vec<u16> = text.replace("\r\n", "\n").encode_utf16().collect();
+        let found = String::from_utf16(&editor_text[hits[0].start..hits[0].end]).unwrap();
+        assert_eq!(found, "写作");
+        assert_eq!(hits[0].line, 2);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

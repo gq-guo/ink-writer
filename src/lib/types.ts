@@ -96,13 +96,13 @@ export interface SearchHit {
   line: number
   /** 命中行片段（前后各 30 字符） */
   snippet: string
-  /** 命中词在文件中的字节偏移 */
+  /** 命中词在文档中的起点（UTF-16 偏移，即编辑器的文档位置） */
   start: number
-  /** 命中词结束位置 */
+  /** 命中词结束位置（UTF-16 偏移） */
   end: number
 }
 
-/** 标签搜索命中（start / end 是编辑器的文档位置） */
+/** 标签搜索命中（start / end 指整个 #标签） */
 export interface TagHit extends SearchHit {
   /** 标签原文（不含 #） */
   tag: string
