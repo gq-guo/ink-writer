@@ -171,7 +171,7 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
     expect(css).toMatch(/\.ink-shell\s*\{[^}]*padding-top:\s*var\(--titlebar-height\)/)
   })
 
-  it('空文档显示 Start writing 引导，输入后消失', async () => {
+  it('空文档只有编辑器里一处占位提示，跟随界面语言', async () => {
     useEditorStore.getState().setHasContent(false)
     window.localStorage.setItem(
       'ink:settings',
@@ -183,6 +183,8 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
           return []
         case 'list_documents':
           return []
+        case 'create_document':
+          return { path: '/tmp/ink-empty-test/Untitled.md', fileName: 'Untitled.md', dirPrefix: '', mtime: 1000, size: 0, displayTitle: 'Untitled' }
         case 'read_document':
           return { content: '', encoding: 'utf-8', mtime: 1000, size: 0, lineEnding: 'lf' }
         default:
@@ -192,14 +194,16 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
 
     const { container } = render(<App />)
     await waitFor(() => {
-      expect(screen.getByText('开始写作')).toBeInTheDocument()
+      expect(container.querySelector('.cm-placeholder')?.textContent).toBe('开始写作…')
     })
-
-    // 模拟输入：经 documentStore.onEditorChange（编辑器每次击键都走这里）
-    await act(async () => {
-      useDocumentStore.getState().onEditorChange('你好')
-    })
+    // 原来居中的那块重复引导没有了
     expect(container.querySelector('.ink-empty-guide')).toBeNull()
+
+    act(() => syncLocale('en'))
+    await waitFor(() => {
+      expect(container.querySelector('.cm-placeholder')?.textContent).toBe('Start writing…')
+    })
+    act(() => syncLocale('zh-CN'))
   })
 
   it('打字时外壳标记 data-typing，鼠标真正移动后恢复（微小抖动不算）', async () => {

@@ -1,9 +1,11 @@
 /**
- * 文档头（元信息行 + 无 H1 时的文件名大标题）
+ * 文档头（元信息行）
  *
  * 以块级 widget 的形式放进编辑器，而不是放在编辑器外面：
  * - 首个非空行是 H1：元信息行紧跟在 H1 下方（效果图 2：标题在上、元信息在下）；
- * - 否则放在正文最上方；正文里没有 H1 时，再加上文件名大标题。
+ * - 否则放在正文最上方。
+ * 不再画「没有 H1 时的文件名大标题」：文件名就是文档名，显示在侧栏和顶栏，
+ * 正文里画一个改不了的标题只会和真正的文字混在一起。
  * 文档头随正文一起滚动，并且和正文共用同一列，左边缘天然对齐。
  *
  * 块级装饰只能由 StateField 提供（ViewPlugin 不允许），
@@ -13,9 +15,7 @@ import { StateEffect, StateField, type EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 
 export interface DocHeaderInfo {
-  /** 文件名大标题；正文里有 H1 时为 null */
-  title: string | null
-  /** 元信息片段：时间 / 字数 / 阅读时长 */
+  /** 元信息片段（目前只有修改时间） */
   meta: string[]
 }
 
@@ -37,7 +37,6 @@ class DocHeaderWidget extends WidgetType {
   eq(other: DocHeaderWidget): boolean {
     return (
       other.afterH1 === this.afterH1 &&
-      other.info.title === this.info.title &&
       other.info.meta.join('\u0000') === this.info.meta.join('\u0000')
     )
   }
@@ -46,12 +45,6 @@ class DocHeaderWidget extends WidgetType {
     const root = document.createElement('div')
     root.className = 'ink-doc-header'
     root.dataset.afterH1 = String(this.afterH1)
-    if (this.info.title && !this.afterH1) {
-      const title = document.createElement('div')
-      title.className = 'ink-doc-heading'
-      title.textContent = this.info.title
-      root.appendChild(title)
-    }
     const meta = document.createElement('div')
     meta.className = 'ink-doc-meta'
     this.info.meta.forEach((part, index) => {

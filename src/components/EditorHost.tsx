@@ -12,6 +12,7 @@ import { setFocusModeEffect } from '@/editor/focusMode'
 import { darkCompartment, inkDarkExtension } from '@/editor/theme'
 import { runCenteringSelfTest } from '@/editor/selftest'
 import { makeSearchPhrases, searchPhrasesCompartment } from '@/editor/searchPhrases'
+import { makePlaceholder, placeholderCompartment } from '@/editor/placeholder'
 import { inkSpellcheck, spellcheckCompartment } from '@/editor/spellcheck'
 import { concealCompartment, concealMarkupFacet } from '@/editor/styledSource'
 import { useLocaleStore } from '@/lib/i18n'
@@ -230,14 +231,18 @@ export function EditorHost() {
     }
   }, [performanceMode, t])
 
-  // ── 语言切换：同步查找面板的文案 ──
+  // ── 语言切换：同步查找面板与空文档占位的文案 ──
   const locale = useLocaleStore((state) => state.locale)
 
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
+      effects: [
+        searchPhrasesCompartment.reconfigure(makeSearchPhrases(locale)),
+        placeholderCompartment.reconfigure(makePlaceholder(locale)),
+      ],
     })
-  }, [locale])
+    // openSeq：切换文档会整体替换 EditorState，compartment 回到创建时的值，需要重新推送
+  }, [locale, openSeq])
 
   // ── 拼写检查开关 ──
   const spellcheck = useSettingsStore((state) => state.settings.spellcheck)
@@ -300,18 +305,14 @@ export function EditorHost() {
     if (effects.length > 0) view.dispatch({ effects })
   }, [focusMode, typewriterMode, performanceMode])
 
-  // ── 文档头（元信息行 / 文件名大标题），以块级 widget 放进编辑器 ──
+  // ── 文档头（元信息行），以块级 widget 放进编辑器 ──
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   // Focus Mode 下不显示元信息（效果图 1 只保留模式胶囊）。
-  // 字数与阅读时长只放右下状态栏，这里不再重复
+  // 字数与阅读时长只放右下状态栏，这里不再重复。
+  // 不再画文件名大标题：文件名就是文档名，显示在侧栏和顶栏；正文从第一行开始就是正文
   const headerInfo: DocHeaderInfo | null =
     activeDocument && sidebarVisible && !focusMode
-      ? {
-          title: activeDocument.titleFromH1
-            ? null
-            : activeDocument.displayTitle || activeDocument.fileName,
-          meta: [formatMetaTime(activeDocument.mtime)],
-        }
+      ? { meta: [formatMetaTime(activeDocument.mtime)] }
       : null
   const headerKey = headerInfo ? JSON.stringify(headerInfo) : ''
 
@@ -320,16 +321,5 @@ export function EditorHost() {
     // openSeq：切换文档会整体替换 EditorState，需要重新推送
   }, [headerKey, openSeq])
 
-  const hasContent = useEditorStore((state) => state.hasContent)
-
-  return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
-      {!hasContent ? (
-        <div className="ink-empty-guide">
-          <div className="ink-empty-title">{t('empty.start')}</div>
-          <div className="ink-empty-sub">{t('empty.firstThought')}</div>
-        </div>
-      ) : null}
-    </div>
-  )
+  return <div ref={containerRef} className="relative h-full w-full overflow-hidden" />
 }

@@ -4,7 +4,7 @@ import { EditorView } from '@codemirror/view'
 
 import { inkDocHeader, setDocHeaderEffect, type DocHeaderInfo } from '@/editor/docHeader'
 
-const INFO: DocHeaderInfo = { title: 'Note', meta: ['Today, 10:00', '3 words', '1 min read'] }
+const INFO: DocHeaderInfo = { meta: ['Today, 10:00'] }
 
 function mount(doc: string, info: DocHeaderInfo | null = INFO) {
   const view = new EditorView({
@@ -26,11 +26,12 @@ describe('文档头 widget 的位置', () => {
     view.destroy()
   })
 
-  it('没有前导 H1：放在正文最上方，并带文件名大标题', () => {
+  it('没有前导 H1：放在正文最上方，不画文件名大标题（文件名就是文档名，显示在侧栏和顶栏）', () => {
     const view = mount('body first\n\n# Later')
     const header = view.dom.querySelector('.ink-doc-header') as HTMLElement
     expect(header.dataset.afterH1).toBe('false')
-    expect(header.querySelector('.ink-doc-heading')?.textContent).toBe('Note')
+    expect(header.querySelector('.ink-doc-heading')).toBeNull()
+    expect(header.textContent).toBe('Today, 10:00')
     expect(view.dom.querySelector('.cm-content')?.firstElementChild).toBe(header)
     view.destroy()
   })

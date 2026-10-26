@@ -279,7 +279,6 @@ async function renderShell(): Promise<void> {
       content: CONTENT,
       originalEncoding: 'utf-8',
       displayTitle: 'Hello World',
-      titleFromH1: !noH1,
       openSeq: 1,
     },
     saveState: 'idle',

@@ -87,8 +87,6 @@ const zh: Record<string, string> = {
   'meta.yesterday': '昨天',
 
   // ── 空文档引导 ──
-  'empty.start': '开始写作',
-  'empty.firstThought': '写下你的第一个想法…',
 
   // ── 空库引导 ──
   'bootstrap.choose': '选择文档库位置',
@@ -343,8 +341,6 @@ const en: Record<string, string> = {
   'meta.today': 'Today',
   'meta.yesterday': 'Yesterday',
 
-  'empty.start': 'Start writing.',
-  'empty.firstThought': 'Write down your first thought…',
 
   'bootstrap.choose': 'Choose library location',
   'bootstrap.useDefault': 'Use default location',
