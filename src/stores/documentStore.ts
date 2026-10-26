@@ -353,7 +353,29 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     // 手动改名：这篇不再跟着第一行自动命名
     if (!options?.auto && autoNamedPath === path) autoNamedPath = null
     try {
-      const newPath = await invoke<string>('rename_document', { path, newName: safeName })
+      // 改名排进写入队列：改名进行中到期的自动保存排在它后面，并且一改完就切到新路径。
+      // 否则那次保存会写回旧路径，把旧文件又建出来
+      const step = writeChain.then(async () => {
+        const renamed = await invoke<string>('rename_document', { path, newName: safeName })
+        const active = get().activeDocument
+        if (active && active.path === path) {
+          const renamedFile = renamed.split('/').pop() ?? safeName
+          set({
+            activeDocument: {
+              ...active,
+              path: renamed,
+              fileName: renamedFile,
+              displayTitle: displayNameOf(renamedFile),
+            },
+          })
+        }
+        return renamed
+      })
+      writeChain = step.then(
+        () => undefined,
+        () => undefined,
+      )
+      const newPath = await step
       if (options?.auto && autoNamedPath === path) autoNamedPath = newPath
       // 重名时 Rust 会自动加 -2（spec §7.2），实际文件名以返回路径为准
       const fileName = newPath.split('/').pop() ?? safeName
@@ -364,17 +386,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         })
       }
       await get().refreshDocuments()
-      const active = get().activeDocument
-      if (active && active.path === path) {
-        set({
-          activeDocument: {
-            ...active,
-            path: newPath,
-            fileName,
-            displayTitle: displayNameOf(fileName),
-          },
-        })
-      }
       // 收藏里存的是路径，rename 后同步，否则收藏会「丢失」
       const settings = useSettingsStore.getState().settings
       if (settings.favorites.includes(path)) {
@@ -490,11 +501,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         return
       }
 
-      const hasPending =
+      const hasPending = () =>
         pendingText !== null ||
         get().saveState === 'dirty' ||
         get().saveState === 'saving' ||
         get().saveState === 'error'
+      const pendingBefore = hasPending()
 
       let disk: ReadDocumentResult
       try {
@@ -502,8 +514,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       } catch {
         return
       }
+      // 读盘期间可能已经切走了，或者又打了字（不能静默覆盖掉）
+      if (get().activeDocument?.path !== event.path) return
 
-      if (hasPending) {
+      if (pendingBefore || hasPending()) {
         // 有 pending 输入 → 冲突三选一
         useEditorStore.getState().setConflict({
           path: event.path,

@@ -622,3 +622,71 @@ describe('离开当前文档前必须落盘', () => {
     expect(documentStore.getState().saveState).toBe('dirty')
   })
 })
+
+describe('改名 / 外部变更与自动保存的竞态', () => {
+  beforeEach(() => {
+    // 上一个用例（旧模块实例）留下的自动保存定时器不能在这里触发
+    vi.clearAllTimers()
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('改名进行中到期的自动保存排在后面，写到新路径', async () => {
+    const { documentStore } = await loadStores()
+    let finishRename: ((path: string) => void) | null = null
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'read_document') {
+        return { content: '', encoding: 'utf-8', mtime: 1000, size: 0, lineEnding: 'lf' }
+      }
+      if (command === 'rename_document') {
+        return new Promise((resolve) => {
+          finishRename = resolve
+        })
+      }
+      if (command === 'write_document') return { mtime: 1001 }
+      if (command === 'list_documents') return []
+      return undefined
+    })
+
+    await documentStore.getState().openDocument('/library/Old.md')
+    const renaming = documentStore.getState().renameDocument('/library/Old.md', 'New')
+    documentStore.getState().onEditorChange('typed during rename')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(invokeMock.mock.calls.some((call) => call[0] === 'write_document')).toBe(false)
+
+    finishRename!('/library/New.md')
+    await renaming
+    await vi.advanceTimersByTimeAsync(0)
+
+    const writes = invokeMock.mock.calls.filter((call) => call[0] === 'write_document')
+    expect(writes).toHaveLength(1)
+    expect(writes[0]![1]).toMatchObject({ path: '/library/New.md', content: 'typed during rename' })
+  })
+
+  it('外部修改后读盘期间又打了字：进冲突，不静默覆盖', async () => {
+    const { documentStore, editorStore } = await loadStores()
+    let finishRead: ((value: unknown) => void) | null = null
+    let reads = 0
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'read_document') {
+        reads += 1
+        if (reads === 1) {
+          return { content: 'original', encoding: 'utf-8', mtime: 1000, size: 8, lineEnding: 'lf' }
+        }
+        return new Promise((resolve) => {
+          finishRead = resolve
+        })
+      }
+      return undefined
+    })
+
+    await documentStore.getState().openDocument(DOC.path)
+    const handling = documentStore.getState().handleExternalEvent({ path: DOC.path, kind: 'modify' })
+    documentStore.getState().onEditorChange('my new words')
+    finishRead!({ content: 'from disk', encoding: 'utf-8', mtime: 2000, size: 9, lineEnding: 'lf' })
+    await handling
+
+    expect(documentStore.getState().saveState).toBe('conflict')
+    expect(editorStore.getState().conflict?.diskContent).toBe('from disk')
+  })
+})

@@ -19,7 +19,8 @@ pub struct DocumentMeta {
     pub path: String,
     pub file_name: String,
     pub dir_prefix: String,
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
     pub size: u64,
     /// 文件名去扩展名（空则 "Untitled"）：文件名就是文档的名字，不再取正文里的 H1
     pub display_title: String,
@@ -30,7 +31,8 @@ pub struct DocumentMeta {
 pub struct ReadDocumentResult {
     pub content: String,
     pub encoding: String,
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
     pub size: u64,
     pub line_ending: String,
 }
@@ -38,7 +40,8 @@ pub struct ReadDocumentResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteResult {
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
 }
 
 /// 命令错误：前端据此区分「保存冲突」与普通错误
@@ -46,7 +49,7 @@ pub struct WriteResult {
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum CommandError {
     /// mtime 乐观锁失败：磁盘上的文件已被其他程序修改
-    MtimeConflict { disk_mtime: i64 },
+    MtimeConflict { disk_mtime: f64 },
     /// 普通错误（IO / 编码 / 权限 …）：code 由前端按当前语言翻译（i18n 的 `error.<code>`），
     /// detail 是路径 / 系统错误等不需要翻译的原文
     Error { code: &'static str, detail: String },
@@ -82,15 +85,19 @@ fn io_message(path: &Path, err: &std::io::Error) -> CommandError {
     CommandError::new(code, format!("{} ({})", path.display(), err))
 }
 
-pub fn stat_info(path: &Path) -> Result<(i64, u64), CommandError> {
+pub fn stat_info(path: &Path) -> Result<(f64, u64), CommandError> {
     let meta = fs::metadata(path).map_err(|e| io_message(path, &e))?;
-    let mtime = meta
-        .modified()
+    Ok((mtime_of(&meta), meta.len()))
+}
+
+/// 修改时间：Unix 秒，保留到毫秒（截到整秒的话，同一秒里的外部修改会骗过乐观锁）。
+/// 毫秒精度的小数经 JSON 往返是精确的，前端原样传回来可以直接比较相等
+pub fn mtime_of(meta: &fs::Metadata) -> f64 {
+    meta.modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    Ok((mtime, meta.len()))
+        .map(|d| d.as_millis() as f64 / 1000.0)
+        .unwrap_or(0.0)
 }
 
 fn is_hidden(name: &str) -> bool {
@@ -152,7 +159,7 @@ pub fn meta_for_testing(path: &Path) -> DocumentMeta {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default(),
         dir_prefix: String::new(),
-        mtime: 0,
+        mtime: 0.0,
         size: 0,
         display_title: String::new(),
     })
@@ -201,7 +208,7 @@ pub fn list_documents(root: &Path) -> Result<Vec<DocumentMeta>, CommandError> {
         }
     }
 
-    out.sort_by(|a, b| b.mtime.cmp(&a.mtime).then(a.path.cmp(&b.path)));
+    out.sort_by(|a, b| b.mtime.total_cmp(&a.mtime).then(a.path.cmp(&b.path)));
     Ok(out)
 }
 
@@ -223,7 +230,19 @@ pub fn read_document(path: &Path) -> Result<ReadDocumentResult, CommandError> {
 }
 
 /// 原子写：写临时文件 → fsync → rename
+///
+/// 目标是符号链接时写到它指向的文件（rename 会把链接本身换成普通文件，真正的文件就再也不更新了）；
+/// 临时文件沿用原文件的权限位
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
+    let resolved;
+    let path = match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            resolved = fs::canonicalize(path).map_err(|e| io_message(path, &e))?;
+            resolved.as_path()
+        }
+        _ => path,
+    };
+    let permissions = fs::metadata(path).ok().map(|meta| meta.permissions());
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| io_message(parent, &e))?;
     }
@@ -237,6 +256,9 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
         let mut file = fs::File::create(&tmp).map_err(|e| io_message(&tmp, &e))?;
         file.write_all(bytes).map_err(|e| io_message(&tmp, &e))?;
         file.sync_all().map_err(|e| io_message(&tmp, &e))?;
+    }
+    if let Some(permissions) = permissions {
+        let _ = fs::set_permissions(&tmp, permissions);
     }
 
     fs::rename(&tmp, path).map_err(|e| {
@@ -257,7 +279,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
 pub fn write_document(
     path: &Path,
     content: &str,
-    expected_mtime: Option<i64>,
+    expected_mtime: Option<f64>,
 ) -> Result<WriteResult, CommandError> {
     if let Some(expected) = expected_mtime {
         if let Ok((current, _)) = stat_info(path) {
@@ -578,12 +600,38 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_follows_symlinks_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("symlink");
+        let real = dir.join("real.md");
+        let link = dir.join("link.md");
+        fs::write(&real, "old").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        write_document(&link, "new", None).unwrap();
+
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "new");
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn mtime_conflict_is_detected() {
         let dir = temp_dir("conflict");
         let path = dir.join("y.md");
         let result = write_document(&path, "one", None).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1100));
+        // 同一秒内的外部修改也要能发现（以前 mtime 截到整秒，这里会被放过去）
+        std::thread::sleep(std::time::Duration::from_millis(20));
         write_document(&path, "two", None).unwrap();
         let err = write_document(&path, "three", Some(result.mtime)).unwrap_err();
         match err {

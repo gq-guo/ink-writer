@@ -293,7 +293,8 @@ fn save_persisted(
 
 // ── 文档操作（全部先过授权校验）──────────────────────────────
 
-#[tauri::command]
+// 扫库 / 读写文件 / 搜索放到线程池上跑：同步命令在主线程执行，大库或网络盘会卡住整个界面
+#[tauri::command(async)]
 fn list_documents(
     state: State<'_, AccessState>,
     root: String,
@@ -303,7 +304,7 @@ fn list_documents(
     fs_ops::list_documents(&root)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_document(
     state: State<'_, AccessState>,
     path: String,
@@ -313,12 +314,12 @@ fn read_document(
     fs_ops::read_document(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_document(
     state: State<'_, AccessState>,
     path: String,
     content: String,
-    expected_mtime: Option<i64>,
+    expected_mtime: Option<f64>,
 ) -> Result<WriteResult, CommandError> {
     let target = to_path(&path);
     lock(&state).check_document(&target)?;
@@ -364,7 +365,7 @@ fn delete_document(state: State<'_, AccessState>, path: String) -> Result<(), Co
     fs_ops::delete_document(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn copy_image_bytes(
     state: State<'_, AccessState>,
     doc_dir: String,
@@ -376,7 +377,7 @@ fn copy_image_bytes(
     fs_ops::copy_image_bytes(&doc_dir, &file_name, &bytes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn search_content(
     state: State<'_, AccessState>,
     root: String,
@@ -550,7 +551,7 @@ pub mod testing {
     pub fn write_document(
         path: &std::path::Path,
         content: &str,
-        expected_mtime: Option<i64>,
+        expected_mtime: Option<f64>,
     ) -> Result<(), String> {
         fs_ops::write_document(path, content, expected_mtime)
             .map(|_| ())
