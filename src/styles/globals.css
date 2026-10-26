@@ -766,6 +766,28 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   box-sizing: border-box;
 }
 
+/*
+ * 半透明侧栏（只在 macOS App 里：theme-boot.js 标 data-vibrancy）
+ * 窗口是透明的，背后是系统的 sidebar 材质。页面不再整体铺底色：
+ * 正文列自己涂纸色（含红绿灯那一条标题栏带），侧栏只留一层淡淡的纸色，透出材质。
+ * 浏览器和测试里没有材质，保持原来的不透明样式。
+ */
+[data-vibrancy='true'] body {
+  background: transparent;
+}
+
+[data-vibrancy='true'] .ink-shell main {
+  background: var(--background);
+  /* 和侧栏一样向上延伸盖住标题栏带，否则正文列顶上会露出一条材质 */
+  margin-top: calc(-1 * var(--titlebar-height));
+  padding-top: var(--titlebar-height);
+  height: calc(100% + var(--titlebar-height));
+}
+
+[data-vibrancy='true'] .ink-sidebar {
+  background: color-mix(in srgb, var(--sidebar) 45%, transparent);
+}
+
 .ink-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);

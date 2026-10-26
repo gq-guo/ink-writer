@@ -1,9 +1,9 @@
-//! 主窗口底色：冷启动时让原生窗口 / WebView 在页面绘制之前就是应用背景色。
+//! 主窗口外观：冷启动时让原生窗口在页面绘制之前就是对的深浅色。
 //!
-//! WKWebView 默认画白底，页面第一帧出来前深色模式会白闪一下。
-//! 所以主窗口不由 tauri.conf.json 自动创建（create = false），而是在 setup 里
-//! 带上底色手动创建：窗口和 WebView 从诞生起就是对应主题的 `--background`。
-use tauri::window::Color;
+//! 主窗口是透明窗口，背后铺 macOS 的 sidebar 材质（tauri.conf.json 的 windowEffects），
+//! 页面只把正文区涂成纸色、侧栏留成半透明。材质的深浅跟随窗口外观（NSAppearance），
+//! 所以只要窗口一创建就带上用户选的主题，页面出来之前露出的也是对应深浅的材质，不会白闪。
+//! 因此主窗口不由 tauri.conf.json 自动创建（create = false），而是在 setup 里带上主题手动创建。
 use tauri::{App, Theme, WebviewWindowBuilder};
 use tauri_plugin_store::StoreExt;
 
@@ -11,18 +11,6 @@ use crate::SETTINGS_STORE;
 
 /// 主窗口 label（与 tauri.conf.json、capabilities 一致）
 const MAIN_WINDOW: &str = "main";
-
-/// 必须与 src/styles/globals.css 中 `:root` / `[data-theme='dark']` 的 `--background` 一致，
-/// 改色时两边一起改（见下方单测 `matches_globals_css`）
-const LIGHT_BACKGROUND: Color = Color(0xfa, 0xf9, 0xf6, 0xff);
-const DARK_BACKGROUND: Color = Color(0x1b, 0x1a, 0x18, 0xff);
-
-fn background_for(theme: Theme) -> Color {
-    match theme {
-        Theme::Dark => DARK_BACKGROUND,
-        _ => LIGHT_BACKGROUND,
-    }
-}
 
 /// 设置里的主题（settings.theme）：'light' / 'dark' 直接用；
 /// 'system'、缺失或格式不对 → None，跟随系统外观
@@ -40,7 +28,8 @@ fn stored_theme(app: &App) -> Option<Theme> {
     theme_from_settings(store.get("settings").as_ref())
 }
 
-/// 按用户主题创建主窗口（setup 中调用，此时页面还没开始加载）
+/// 按用户主题创建主窗口（setup 中调用，此时页面还没开始加载）。
+/// 之后主题切换由前端 settingsStore 调 setTheme 同步。
 pub fn create_main_window(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let config = app
         .config()
@@ -50,19 +39,10 @@ pub fn create_main_window(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .find(|window| window.label == MAIN_WINDOW)
         .ok_or("tauri.conf.json 缺少 main 窗口配置")?;
 
-    let preferred = stored_theme(app);
-    // 跟随系统时先按浅色建：带上底色才会在创建 WebView 时就关掉它的白底
-    let window = WebviewWindowBuilder::from_config(app.handle(), config)?
-        .background_color(background_for(preferred.unwrap_or(Theme::Light)))
+    // None = 跟随系统外观，材质与红绿灯自然跟着系统走
+    WebviewWindowBuilder::from_config(app.handle(), config)?
+        .theme(stored_theme(app))
         .build()?;
-
-    if preferred.is_none() {
-        // 系统外观要有窗口才读得到。仍在同一次主线程回调里，回到 run loop 绘制首帧之前就改好
-        let system = window.theme().unwrap_or(Theme::Light);
-        if system == Theme::Dark {
-            window.set_background_color(Some(DARK_BACKGROUND))?;
-        }
-    }
     Ok(())
 }
 
@@ -94,28 +74,17 @@ mod tests {
         assert_eq!(theme_from_settings(None), None);
     }
 
-    /// 取 CSS 中某个选择器块里的 `--background`（#rrggbb）
-    fn css_background(css: &str, selector: &str) -> Color {
-        let start = css
-            .find(&format!("{selector} {{"))
-            .unwrap_or_else(|| panic!("globals.css 中找不到 {selector}"));
-        let block = &css[start..];
-        let block = &block[..block.find('}').expect("块未闭合")];
-        let value = block
-            .lines()
-            .find_map(|line| line.trim().strip_prefix("--background:"))
-            .unwrap_or_else(|| panic!("{selector} 中没有 --background"));
-        let hex = value.trim().trim_end_matches(';').trim();
-        let hex = hex.strip_prefix('#').expect("--background 应为 #rrggbb");
-        assert_eq!(hex.len(), 6, "--background 应为 #rrggbb：{hex}");
-        let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).expect("非法十六进制");
-        Color(channel(0), channel(2), channel(4), 0xff)
-    }
-
+    /// 透明窗口 + sidebar 材质是半透明侧栏的前提；配置被改掉时这里会失败
     #[test]
-    fn matches_globals_css() {
-        let css = include_str!("../../src/styles/globals.css");
-        assert_eq!(css_background(css, ":root"), LIGHT_BACKGROUND);
-        assert_eq!(css_background(css, "[data-theme='dark']"), DARK_BACKGROUND);
+    fn main_window_is_transparent_with_sidebar_material() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json 不是合法 JSON");
+        let main = conf["app"]["windows"]
+            .as_array()
+            .and_then(|windows| windows.iter().find(|w| w["label"] == MAIN_WINDOW))
+            .expect("缺少 main 窗口配置");
+        assert_eq!(main["transparent"], true);
+        assert_eq!(main["windowEffects"]["effects"], json!(["sidebar"]));
+        assert_eq!(conf["app"]["macOSPrivateApi"], true);
     }
 }

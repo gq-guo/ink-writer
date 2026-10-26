@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
+import { BootBackgroundRelease } from '@/components/BootBackgroundRelease'
 import { CommandPalette } from '@/components/CommandPalette'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { DocumentOutline } from '@/components/DocumentOutline'
@@ -196,6 +197,7 @@ export default function App() {
         <LibraryBootstrap />
         <Toast />
         <GlobalShortcuts />
+        <BootBackgroundRelease />
       </>
     )
   }
@@ -220,6 +222,7 @@ export default function App() {
       <UpdateDialog />
       <Toast />
       <GlobalShortcuts />
+      <BootBackgroundRelease />
     </div>
   )
 }
