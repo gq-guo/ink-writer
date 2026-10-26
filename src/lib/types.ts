@@ -61,7 +61,7 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
   /** 已不再生效（accent 跟随主题），保留字段以兼容旧设置文件 */
   accentColor: string
-  fontFamily: 'system' | 'quattro' | 'plex' | 'serif' | 'noto' | 'wenkai' | 'mono'
+  fontFamily: 'system' | 'quattro' | 'serif' | 'noto' | 'wenkai' | 'mono'
   fontSize: number
   lineHeight: number
   contentWidth: number
