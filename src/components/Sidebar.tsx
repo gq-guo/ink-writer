@@ -144,9 +144,8 @@ export function Sidebar() {
   const contextEntries = useCallback(
     (document: DocumentMeta): ContextMenuEntry[] => {
       const isFavorite = favorites.includes(document.path)
+      // 没有「打开」：单击条目就已经打开了（Finder 需要它是因为单击只是选中）
       return [
-        { label: t('sidebar.context.open'), action: () => void openDocument(document.path) },
-        'separator',
         {
           label: t(isFavorite ? 'sidebar.context.removeFavorite' : 'sidebar.context.addFavorite'),
           action: () =>
@@ -171,7 +170,7 @@ export function Sidebar() {
         { label: t('sidebar.context.trash'), action: () => void deleteDocument(document.path), danger: true },
       ]
     },
-    [deleteDocument, favorites, openDocument, t, updateSettings],
+    [deleteDocument, favorites, t, updateSettings],
   )
 
   const openContextMenu = useCallback(
