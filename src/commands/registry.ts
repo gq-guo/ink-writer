@@ -28,6 +28,11 @@ export interface Command {
   when?: () => boolean
   /** 只给快捷键 / 菜单栏用、不在 Palette 里列出（与 when 不同：不影响执行） */
   hideInPalette?: boolean
+  /**
+   * 改正文的编辑命令：从快捷键 / 菜单栏触发时，焦点在编辑器以外的输入框（顶栏改名、搜索框…）就不执行，
+   * 按住快捷键也不连发
+   */
+  editorScoped?: boolean
 }
 
 export function buildCommands(): Command[] {
@@ -75,6 +80,7 @@ export function buildCommands(): Command[] {
       shortcut: '⌘L',
       run: () => editorBridge.toggleTask(),
       when: () => useDocumentStore.getState().activeDocument !== null,
+      editorScoped: true,
     },
     {
       group: 'view',

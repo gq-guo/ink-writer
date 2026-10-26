@@ -118,6 +118,42 @@ export const inkThemeSpec = {
   '.cm-md-task-marker': {
     cursor: 'pointer',
   },
+  // 光标外的任务项：`- [ ] ` 换成复选框。外悬盒宽度 = styledSource 的 CHECKBOX_HANG
+  '.cm-md-checkbox-hang': {
+    display: 'inline-block',
+    width: '1.5em',
+    textIndent: '0',
+  },
+  // 不用彩色（朱砂只给光标和选区）：未完成是弱化色细框，已完成填弱化色、纸色对勾
+  '.cm-md-checkbox': {
+    display: 'inline-block',
+    position: 'relative',
+    boxSizing: 'border-box',
+    width: '0.85em',
+    height: '0.85em',
+    verticalAlign: '-0.08em',
+    border: '1.5px solid var(--secondary)',
+    borderRadius: '3px',
+    cursor: 'pointer',
+  },
+  // 有序列表保留序号，复选框留在行内，右边空出一点（不用 margin，见 paragraphSpacing 测试）
+  '.cm-md-checkbox-inline': {
+    paddingRight: '0.3em',
+  },
+  '.cm-md-checkbox[data-checked]': {
+    backgroundColor: 'var(--secondary)',
+  },
+  '.cm-md-checkbox[data-checked]::after': {
+    content: '""',
+    position: 'absolute',
+    left: '0.24em',
+    top: '0.06em',
+    width: '0.18em',
+    height: '0.4em',
+    border: 'solid var(--background)',
+    borderWidth: '0 0.1em 0.1em 0',
+    transform: 'rotate(45deg)',
+  },
   '.cm-md-task-done, .cm-md-task-done *': {
     color: 'var(--secondary)',
     textDecoration: 'line-through',

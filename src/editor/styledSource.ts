@@ -6,7 +6,7 @@
  * 标记隐藏（设置「显示 Markdown 标记」关闭时，默认）：光标不在的行隐藏
  * 标题的 # 、粗斜体的 * _、删除线的 ~~、行内代码的反引号、行内链接的 [ ](url)、转义的 \；
  * 光标所在行（含选区覆盖的行）照常显示全部标记，编辑时看到的仍是源码。
- * 列表、引用、图片、引用式链接、表格的标记不隐藏（只弱化）。
+ * 列表、引用、图片、引用式链接、表格的标记不隐藏（只弱化）；任务项例外：`- [ ] ` 换成复选框（见 tasks.ts）。
  *
  * 块级样式：遍历 syntaxTree(view.state) 的可见区间（view.visibleRanges）
  * 行内样式：同一插件对可见区间内的行内节点产出 Decoration.mark
@@ -24,6 +24,8 @@ import {
 } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+
+import { TaskCheckboxWidget, taskMarkerOf } from './tasks'
 
 /** 可见区间外扩的行数（spec §18.2） */
 const PAD_LINES = 200
@@ -172,11 +174,13 @@ export function buildDecorations(
       ? selectionLines(state)
       : new Set<number>()
     : null
+  /** 这一行隐藏标记（设置开启隐藏、且光标不在这一行） */
+  const concealedLine = (line: number) => activeLines !== null && !activeLines.has(line)
   const conceal = (from: number, to: number) => {
-    if (!activeLines || to <= from) return
+    if (to <= from) return
     const line = state.doc.lineAt(from).number
     // ViewPlugin 的装饰不能替换换行（跨行的链接等保持原样）
-    if (activeLines.has(line) || state.doc.lineAt(to).number !== line) return
+    if (!concealedLine(line) || state.doc.lineAt(to).number !== line) return
     builder.marks.push(Decoration.replace({}).range(from, to))
   }
 
@@ -324,13 +328,31 @@ export function buildDecorations(
               }
               const markWidth = state.doc.sliceString(mark.from, mark.to).length + 1
               const lead = `${(spaces * LIST_LEAD_SPACE_EM).toFixed(2)}em + ${others}ch`
-              const hang = `${lead} + ${markWidth}ch`
+              // 光标外的任务项：`- [ ] ` 换成复选框（无序列表连同 - 一起换，复选框外悬在 - 的位置；有序列表保留序号）
+              const marker = taskMarkerOf(node)
+              const checkbox =
+                marker && concealedLine(line.number) && state.doc.lineAt(marker.from).number === line.number
+                  ? marker
+                  : null
+              const hanging = checkbox !== null && /^[-*+]$/.test(state.doc.sliceString(mark.from, mark.to))
+              if (checkbox) {
+                const end = state.doc.sliceString(checkbox.to, checkbox.to + 1) === ' ' ? checkbox.to + 1 : checkbox.to
+                const checked = /[xX]/.test(state.doc.sliceString(checkbox.from + 1, checkbox.to - 1))
+                builder.marks.push(
+                  Decoration.replace({ widget: new TaskCheckboxWidget(checked, hanging) }).range(
+                    hanging ? mark.from : checkbox.from,
+                    end,
+                  ),
+                )
+              }
+              const hang = `${lead} + ${hanging ? CHECKBOX_HANG : `${markWidth}ch`}`
               // 引用里的列表：行内 style 会盖掉 .cm-md-quote 的左内边距，这里补回来
               const quote = hasAncestor(node, 'Blockquote') ? `${QUOTE_PADDING_PX}px + ` : ''
               builder.lineStyles.set(
                 line.number,
                 `padding-left:calc(${quote}${lead});text-indent:calc(-1 * (${hang}))`,
               )
+              if (hanging) break
               addMark(mark.from, mark.to, 'cm-md-mark')
               if (state.doc.sliceString(mark.to, mark.to + 1) === ' ') addHangBox(mark.from, mark.to + 1, markWidth)
             }
@@ -369,7 +391,8 @@ export function buildDecorations(
             addMark(node.from, node.to, 'cm-md-task-marker')
             const task = node.parent
             if (task?.name === 'Task' && /[xX]/.test(state.doc.sliceString(node.from + 1, node.to - 1))) {
-              addMark(node.to, task.to, 'cm-md-task-done')
+              const textFrom = state.doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to
+              addMark(textFrom, task.to, 'cm-md-task-done')
             }
             break
           }
@@ -484,6 +507,8 @@ function isParagraphLine(state: EditorState, lineNumber: number): boolean {
 
 /** 列表前导空格加宽后的宽度（衬线体空格约 0.25em + letter-spacing 0.35em） */
 const LIST_LEAD_SPACE_EM = 0.6
+/** 光标外任务项的复选框外悬宽度（与 theme 里 .cm-md-checkbox-hang 的宽度一致） */
+const CHECKBOX_HANG = '1.5em'
 /** 与 theme.ts 的 .cm-md-quote paddingLeft 一致 */
 const QUOTE_PADDING_PX = 16
 

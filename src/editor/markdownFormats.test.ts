@@ -195,10 +195,10 @@ describe('Markdown 全格式：列表与任务', () => {
     expect(line('- [x] 已完成任务').lineClasses).toContain('para')
   })
 
-  it('任务框弱化，任务里的格式照常处理', () => {
+  it('任务框弱化，任务里的格式照常处理；光标外 - [ ] 换成复选框', () => {
     expect(marksOf('- [x] 已完成任务', 'mark')).toContain('[x]')
-    expect(marksOf('- [x] 已完成任务', 'task-done')).toEqual([' 已完成任务'])
-    expect(line('- [ ] 任务里有 **粗体** 和 `代码`').shown).toBe('- [ ] 任务里有 粗体 和 代码')
+    expect(marksOf('- [x] 已完成任务', 'task-done')).toEqual(['已完成任务'])
+    expect(line('- [ ] 任务里有 **粗体** 和 `代码`').shown).toBe('任务里有 粗体 和 代码')
   })
 })
 

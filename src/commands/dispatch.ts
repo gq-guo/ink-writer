@@ -15,6 +15,13 @@ const DEDUPE_MS = 300
 
 let lastRun: { id: string; source: CommandSource; at: number } | null = null
 
+/** 焦点在编辑器正文以外的输入框里（顶栏 / 侧栏改名、编辑器的搜索框、设置面板…） */
+export function isTypingOutsideEditor(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.closest('.cm-content')) return false
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable
+}
+
 /** 执行命令；被去重或 when() 不满足时返回 false */
 export function dispatchCommand(id: string, source: CommandSource): boolean {
   const now = performance.now()
@@ -24,6 +31,8 @@ export function dispatchCommand(id: string, source: CommandSource): boolean {
   const command = buildCommands().find((item) => item.id === id)
   if (!command) return false
   if (command.when && !command.when()) return false
+  // 改名框里点菜单栏的编辑命令（焦点还在输入框）不应改到正文
+  if (command.editorScoped && isTypingOutsideEditor(document.activeElement)) return false
   lastRun = { id, source, at: now }
   // 菜单可以在 overlay 打开时被点到（快捷键此时由 overlay 自己处理），先收起再执行
   if (source === 'menu') useUiStore.getState().closeOverlays()

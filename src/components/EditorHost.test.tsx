@@ -122,4 +122,26 @@ describe('EditorHost 切换任务', () => {
     })
     expect(view.state.doc.toString()).toBe('- [x] hello')
   })
+
+  it('焦点在别的输入框、Ctrl+L、按住连发：都不改正文', async () => {
+    render(<GlobalShortcuts />)
+    const { view } = await mountEditor()
+    act(() => view.dispatch({ selection: { anchor: 2 } }))
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+    })
+    expect(view.state.doc.toString()).toBe('hello')
+    expect(document.activeElement).toBe(input)
+    input.remove()
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, repeat: true }))
+    })
+    expect(view.state.doc.toString()).toBe('hello')
+  })
 })
