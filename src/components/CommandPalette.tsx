@@ -44,7 +44,7 @@ export function CommandPalette() {
 
   /** 过滤 + 评分（保持命令注册顺序，组内稳定） */
   const scored = useMemo<ScoredCommand[]>(() => {
-    const available = commands.filter((command) => command.when?.() ?? true)
+    const available = commands.filter((command) => !command.hideInPalette && (command.when?.() ?? true))
     const trimmed = query.trim()
 
     return available.flatMap((command, index) => {

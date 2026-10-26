@@ -133,6 +133,8 @@ export function SettingsPanel() {
               onChange={(showMarkup) => update({ showMarkup })}
             />
           </div>
+          {/* 说明紧跟在它所解释的开关下面，不能放到下一个开关之后 */}
+          <p className="ink-settings-hint">{t('settings.showMarkupHint')}</p>
           <div className="ink-settings-row">
             <span>{t('settings.typewriter')}</span>
             <Switch
@@ -141,7 +143,6 @@ export function SettingsPanel() {
               onChange={(typewriterMode) => update({ typewriterMode })}
             />
           </div>
-          <p className="ink-settings-hint">{t('settings.showMarkupHint')}</p>
           <p className="ink-settings-hint">{t('settings.typographyHint')}</p>
         </section>
 

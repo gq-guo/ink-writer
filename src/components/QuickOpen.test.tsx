@@ -43,7 +43,7 @@ describe('Quick Open（spec W3）', () => {
 
   it('输入过滤文档', () => {
     render(<QuickOpen />)
-    const input = screen.getByPlaceholderText('Search documents...')
+    const input = screen.getByPlaceholderText('Search documents')
     fireEvent.change(input, { target: { value: 'read' } })
     expect(screen.getByText('Readme')).toBeInTheDocument()
     expect(screen.queryByText('Hello World')).not.toBeInTheDocument()
@@ -51,7 +51,7 @@ describe('Quick Open（spec W3）', () => {
 
   it('无匹配时显示提示', () => {
     render(<QuickOpen />)
-    const input = screen.getByPlaceholderText('Search documents...')
+    const input = screen.getByPlaceholderText('Search documents')
     fireEvent.change(input, { target: { value: 'zzzzzz' } })
     expect(screen.getByText('No matching documents')).toBeInTheDocument()
   })
@@ -60,7 +60,7 @@ describe('Quick Open（spec W3）', () => {
     const openDocument = vi.fn()
     useDocumentStore.setState({ openDocument } as never)
     render(<QuickOpen />)
-    const input = screen.getByPlaceholderText('Search documents...')
+    const input = screen.getByPlaceholderText('Search documents')
     fireEvent.change(input, { target: { value: 'hello' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(openDocument).toHaveBeenCalledWith('/library/hello.md')
@@ -68,14 +68,14 @@ describe('Quick Open（spec W3）', () => {
 
   it('Esc 关闭', () => {
     render(<QuickOpen />)
-    const input = screen.getByPlaceholderText('Search documents...')
+    const input = screen.getByPlaceholderText('Search documents')
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(useUiStore.getState().quickOpenVisible).toBe(false)
   })
 
   it('查询 ≥2 字符时触发正文搜索', async () => {
     render(<QuickOpen />)
-    const input = screen.getByPlaceholderText('Search documents...')
+    const input = screen.getByPlaceholderText('Search documents')
     fireEvent.change(input, { target: { value: 'keyword' } })
     await waitFor(() => {
       const calls = invokeMock.mock.calls.filter((call) => call[0] === 'search_content')

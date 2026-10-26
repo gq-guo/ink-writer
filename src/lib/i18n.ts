@@ -357,11 +357,11 @@ const en: Record<string, string> = {
   'conflict.loadDisk': 'Load Disk Version',
   'conflict.saveCopy': 'Save a Copy…',
 
-  'quickOpen.placeholder': 'Search documents...',
+  'quickOpen.placeholder': 'Search documents',
   'quickOpen.empty': 'No matching documents',
   'quickOpen.contentGroup': 'In documents',
 
-  'palette.placeholder': 'Type a command...',
+  'palette.placeholder': 'Search commands',
   'palette.empty': 'No matching commands',
   'palette.group.file': 'File',
   'palette.group.edit': 'Edit',
