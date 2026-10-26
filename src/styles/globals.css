@@ -1435,20 +1435,13 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   padding: 8px 22px 18px;
 }
 
-/* 墨色羽毛，不做彩色 logo */
-.ink-brand {
-  width: 16px;
-  height: 16px;
-  color: color-mix(in srgb, var(--foreground) 75%, transparent);
-}
-
+/* 字标：正体衬线、小一号、略淡，不配羽毛图标也不用斜体（写作软件的老套路） */
 .ink-brand-name {
   font-family: var(--writing-serif);
-  font-size: 20px;
-  font-style: italic;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--foreground);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--secondary));
 }
 
 .ink-sidebar-nav {
