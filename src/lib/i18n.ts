@@ -72,6 +72,8 @@ const zh: Record<string, string> = {
   'type.columnWidth': '栏宽',
   'type.font.system': '系统字体',
   'type.font.serif': '衬线体',
+  'type.font.noto': 'Noto 宋体',
+  'type.font.wenkai': '霞鹜文楷',
   'type.font.mono': '等宽字体',
 
   // ── 状态栏 / 统计卡 ──
@@ -330,6 +332,8 @@ const en: Record<string, string> = {
   'type.columnWidth': 'Column Width',
   'type.font.system': 'System',
   'type.font.serif': 'Serif',
+  'type.font.noto': 'Noto Serif',
+  'type.font.wenkai': 'LXGW WenKai',
   'type.font.mono': 'Monospace',
 
   'stats.words': 'Words',

@@ -14,6 +14,8 @@ const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string | null> = {
   quattro: null,
   plex: null,
   serif: 'type.font.serif',
+  noto: 'type.font.noto',
+  wenkai: 'type.font.wenkai',
   mono: 'type.font.mono',
 }
 
