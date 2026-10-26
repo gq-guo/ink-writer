@@ -19,9 +19,7 @@ const DOC = {
   size: 10,
   content: '',
   originalEncoding: 'utf-8' as const,
-  // 首行 H1 与文件名不同，顶栏才显示文件名（同名属于重复信息，见下方用例）
-  displayTitle: 'My Draft',
-  titleFromH1: true,
+  displayTitle: 'Untitled',
   openSeq: 1,
 }
 
@@ -32,29 +30,16 @@ describe('TopBar 文件名内联重命名', () => {
     useUiStore.setState({ renameSignal: 0, sidebarVisible: true })
   })
 
-  it('文件名与正文可见的标题同名时不显示', () => {
-    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled' } })
+  it('总是显示文档名（文件名去扩展名）：正文里不再有文件名大标题，顶栏是唯一显示它的地方', () => {
+    useDocumentStore.setState({ activeDocument: { ...DOC, fileName: '周报.md', path: '/library/周报.md', displayTitle: '周报' } })
     render(<TopBar />)
-    expect(screen.queryByText('Untitled.md')).not.toBeInTheDocument()
-  })
-
-  it('无 H1 且侧栏收起（文档头不显示）时，同名也保留文件名', () => {
-    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled', titleFromH1: false } })
-    useUiStore.setState({ sidebarVisible: false })
-    render(<TopBar />)
-    expect(screen.getByText('Untitled.md')).toBeInTheDocument()
-  })
-
-  it('同名被隐藏时，命令触发的重命名仍能进入编辑态', async () => {
-    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled' } })
-    render(<TopBar />)
-    act(() => useUiStore.getState().requestRename())
-    expect(await screen.findByDisplayValue('Untitled')).toBeInTheDocument()
+    expect(screen.getByText('周报')).toBeInTheDocument()
+    expect(screen.queryByText('周报.md')).not.toBeInTheDocument()
   })
 
   it('点击文件名进入编辑态（不用 window.prompt）', () => {
     render(<TopBar />)
-    fireEvent.click(screen.getByText('Untitled.md'))
+    fireEvent.click(screen.getByText('Untitled'))
     const input = screen.getByDisplayValue('Untitled')
     expect(input).toBeInTheDocument()
   })
@@ -63,7 +48,7 @@ describe('TopBar 文件名内联重命名', () => {
     const renameDocument = vi.fn()
     useDocumentStore.setState({ renameDocument } as never)
     render(<TopBar />)
-    fireEvent.click(screen.getByText('Untitled.md'))
+    fireEvent.click(screen.getByText('Untitled'))
     const input = screen.getByDisplayValue('Untitled')
     fireEvent.change(input, { target: { value: 'My Notes' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -74,7 +59,7 @@ describe('TopBar 文件名内联重命名', () => {
     const renameDocument = vi.fn()
     useDocumentStore.setState({ renameDocument } as never)
     render(<TopBar />)
-    fireEvent.click(screen.getByText('Untitled.md'))
+    fireEvent.click(screen.getByText('Untitled'))
     const input = screen.getByDisplayValue('Untitled')
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(renameDocument).not.toHaveBeenCalled()
@@ -111,7 +96,7 @@ describe('TopBar 文件名内联重命名', () => {
     const renameDocument = vi.fn()
     useDocumentStore.setState({ renameDocument } as never)
     render(<TopBar />)
-    fireEvent.click(screen.getByText('Untitled.md'))
+    fireEvent.click(screen.getByText('Untitled'))
     const input = screen.getByDisplayValue('Untitled')
     fireEvent.change(input, { target: { value: 'Once' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -124,7 +109,7 @@ describe('TopBar 文件名内联重命名', () => {
     const renameDocument = vi.fn()
     useDocumentStore.setState({ renameDocument } as never)
     render(<TopBar />)
-    fireEvent.click(screen.getByText('Untitled.md'))
+    fireEvent.click(screen.getByText('Untitled'))
     const input = screen.getByDisplayValue('Untitled')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(renameDocument).not.toHaveBeenCalled()

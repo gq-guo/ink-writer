@@ -35,14 +35,15 @@ fn detects_crlf_line_endings() {
 }
 
 #[test]
-fn extracts_h1_as_display_title() {
+fn display_title_is_file_name_even_with_h1() {
+    // 文件名就是文档名：正文里有 H1（「Ink 写作示例」）也不拿来当标题
     let path = fixture("basic.md");
     let meta = ink_writer_lib::testing::meta_for_testing(&path);
-    assert_eq!(meta.display_title, "Ink 写作示例");
+    assert_eq!(meta.display_title, "basic");
 }
 
 #[test]
-fn falls_back_to_file_name_without_h1() {
+fn display_title_is_file_name_without_h1() {
     let path = fixture("no-h1.md");
     let meta = ink_writer_lib::testing::meta_for_testing(&path);
     assert_eq!(meta.display_title, "no-h1");

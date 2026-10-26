@@ -43,7 +43,6 @@ const zh: Record<string, string> = {
   'sidebar.group.thisWeek': '最近 7 天',
   'sidebar.group.earlier': '更早',
   'sidebar.collapse': '折叠侧边栏',
-  'sidebar.context.open': '打开',
   'sidebar.context.addFavorite': '加入收藏',
   'sidebar.context.removeFavorite': '取消收藏',
   'sidebar.context.rename': '重命名…',
@@ -88,8 +87,6 @@ const zh: Record<string, string> = {
   'meta.yesterday': '昨天',
 
   // ── 空文档引导 ──
-  'empty.start': '开始写作',
-  'empty.firstThought': '写下你的第一个想法…',
 
   // ── 空库引导 ──
   'bootstrap.choose': '选择文档库位置',
@@ -305,7 +302,6 @@ const en: Record<string, string> = {
   'sidebar.group.thisWeek': 'Last 7 days',
   'sidebar.group.earlier': 'Earlier',
   'sidebar.collapse': 'Collapse Sidebar',
-  'sidebar.context.open': 'Open',
   'sidebar.context.addFavorite': 'Add to Favorites',
   'sidebar.context.removeFavorite': 'Remove from Favorites',
   'sidebar.context.rename': 'Rename…',
@@ -345,8 +341,6 @@ const en: Record<string, string> = {
   'meta.today': 'Today',
   'meta.yesterday': 'Yesterday',
 
-  'empty.start': 'Start writing.',
-  'empty.firstThought': 'Write down your first thought…',
 
   'bootstrap.choose': 'Choose library location',
   'bootstrap.useDefault': 'Use default location',

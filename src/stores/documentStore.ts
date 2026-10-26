@@ -20,7 +20,7 @@ import type {
   SaveState,
   WriteResult,
 } from '@/lib/types'
-import { extractDisplayTitle, extractTitleInfo, titleComesFromH1 } from '@/lib/title'
+import { displayNameOf, followsFirstLine, nameFromFirstLine, sameName } from '@/lib/title'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from './editorStore'
@@ -37,8 +37,8 @@ const RETRY_INTERVAL_MS = 5000
 const MAX_RETRIES = 3
 /** saved 状态保持时长 */
 const SAVED_LINGER_MS = 1500
-/** 标题重算防抖 */
-const TITLE_REFRESH_DEBOUNCE_MS = 1000
+/** 新文档按第一行自动命名：停笔这么久之后再改文件名 */
+const AUTO_NAME_DEBOUNCE_MS = 1000
 
 export interface FsEventPayload {
   path: string
@@ -60,7 +60,8 @@ interface DocumentState {
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
   onEditorChange: (text: string) => void
   flushSave: () => Promise<void>
-  renameDocument: (path: string, newName: string) => Promise<void>
+  /** auto：自动命名（按第一行）发起的改名，不提示撞名、也不会停止自动命名 */
+  renameDocument: (path: string, newName: string, options?: { auto?: boolean }) => Promise<void>
   deleteDocument: (path: string) => Promise<void>
   resolveConflict: (choice: ConflictChoice) => Promise<void>
   handleExternalEvent: (event: FsEventPayload) => Promise<void>
@@ -96,7 +97,12 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let savedTimer: ReturnType<typeof setTimeout> | null = null
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
-let titleTimer: ReturnType<typeof setTimeout> | null = null
+let autoNameTimer: ReturnType<typeof setTimeout> | null = null
+/**
+ * 正在「跟着第一行自动命名」的文档路径（只看当前打开的那篇）：
+ * 打开时按 followsFirstLine 判定，自动改名后跟到新路径，手动改名后清掉
+ */
+let autoNamedPath: string | null = null
 let retryCount = 0
 
 function clearSaveTimer() {
@@ -230,10 +236,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         size: result.size,
         content: result.content,
         originalEncoding: (result.encoding as Document['originalEncoding']) ?? 'unknown',
-        displayTitle: extractDisplayTitle(result.content, fileName),
-        titleFromH1: titleComesFromH1(result.content),
+        displayTitle: displayNameOf(fileName),
         openSeq: ++openSeqCounter,
       }
+      autoNamedPath = followsFirstLine(fileName, result.content) ? path : null
       pendingText = null
       lastWrittenText = result.content
       latestText = result.content
@@ -272,12 +278,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       void get().flushSave()
     }, AUTOSAVE_DEBOUNCE_MS)
 
-    // 标题重算（spec §7.3：编辑中防抖 1s 重算）
-    if (titleTimer) clearTimeout(titleTimer)
-    titleTimer = setTimeout(() => {
-      titleTimer = null
-      refreshActiveTitle()
-    }, TITLE_REFRESH_DEBOUNCE_MS)
+    // 新文档的文件名跟着第一行走（停笔 1s 后改名）
+    if (autoNameTimer) clearTimeout(autoNameTimer)
+    autoNameTimer = setTimeout(() => {
+      autoNameTimer = null
+      void autoNameActive()
+    }, AUTO_NAME_DEBOUNCE_MS)
   },
 
   /**
@@ -289,14 +295,17 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     return writeChain
   },
 
-  renameDocument: async (path: string, newName: string) => {
+  renameDocument: async (path: string, newName: string, options?: { auto?: boolean }) => {
     const safeName = ensureMarkdownExtension(sanitizeFileName(newName))
     if (!safeName) return
+    // 手动改名：这篇不再跟着第一行自动命名
+    if (!options?.auto && autoNamedPath === path) autoNamedPath = null
     try {
       const newPath = await invoke<string>('rename_document', { path, newName: safeName })
+      if (options?.auto && autoNamedPath === path) autoNamedPath = newPath
       // 重名时 Rust 会自动加 -2（spec §7.2），实际文件名以返回路径为准
       const fileName = newPath.split('/').pop() ?? safeName
-      if (fileName !== safeName) {
+      if (fileName !== safeName && !options?.auto) {
         useUiStore.getState().pushToast({
           message: t('toast.renamedDeduped', { requested: safeName, name: fileName }),
           kind: 'info',
@@ -310,8 +319,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
             ...active,
             path: newPath,
             fileName,
-            displayTitle: extractDisplayTitle(latestText, fileName),
-            titleFromH1: titleComesFromH1(latestText),
+            displayTitle: displayNameOf(fileName),
           },
         })
       }
@@ -410,7 +418,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
             ...state.activeDocument,
             content: conflict.diskContent,
             mtime: conflict.diskMtime,
-            displayTitle: extractDisplayTitle(conflict.diskContent, state.activeDocument.fileName),
           }
         : null,
       saveState: 'idle',
@@ -471,7 +478,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
               content: disk.content,
               mtime: disk.mtime,
               size: disk.size,
-              displayTitle: extractDisplayTitle(disk.content, state.activeDocument.fileName),
             }
           : null,
       }))
@@ -488,25 +494,19 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 }))
 
 /**
- * 重算活动文档的显示标题（首个 H1 变化时更新列表）
+ * 自动命名：当前文档还在跟着第一行走时，把文件名改成第一行生成的名字。
+ * 先把正在等的保存写掉，再改名，避免保存写回旧路径。
  */
-function refreshActiveTitle() {
+async function autoNameActive() {
   const state = useDocumentStore.getState()
   const active = state.activeDocument
-  if (!active) return
-  const info = extractTitleInfo(latestText, active.fileName)
-  if (info.title === active.displayTitle && info.fromH1 === active.titleFromH1) return
-
-  useDocumentStore.setState((s) => ({
-    activeDocument: s.activeDocument
-      ? { ...s.activeDocument, displayTitle: info.title, titleFromH1: info.fromH1 }
-      : s.activeDocument,
-    documents: s.documents.map((doc) =>
-      doc.path === active.path
-        ? { ...doc, displayTitle: info.title, titleFromH1: info.fromH1 }
-        : doc,
-    ),
-  }))
+  if (!active || autoNamedPath !== active.path) return
+  const name = nameFromFirstLine(latestText)
+  if (!name || sameName(displayNameOf(active.fileName), name)) return
+  await state.flushSave()
+  // 写盘期间可能已经切换了文档 / 手动改了名
+  if (useDocumentStore.getState().activeDocument?.path !== active.path || autoNamedPath !== active.path) return
+  await state.renameDocument(active.path, name, { auto: true })
 }
 
 /**

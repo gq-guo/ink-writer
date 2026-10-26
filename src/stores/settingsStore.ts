@@ -4,7 +4,7 @@
  * settingsStore 是唯一写磁盘的 store：字段变更 → debounce 300ms → 落盘。
  */
 import { create } from 'zustand'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { AppSettings } from '@/lib/types'
 import { isTauriRuntime, loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
 import { resolveLocale, syncLocale, t, type Locale } from '@/lib/i18n'
@@ -116,16 +116,15 @@ function rememberThemeForBoot(theme: AppSettings['theme']) {
 }
 
 /**
- * 原生窗口 / webview 的底色跟随主题：刷新时页面先清空，露出的是 webview 底色（默认白色），
- * 深色模式下就是一次白闪。设置一次后在同一窗口内跨刷新保留。
+ * 原生窗口外观跟随主题：主窗口是透明窗口，背后是 macOS 的 sidebar 材质，
+ * 侧栏透出它、刷新时页面清空露出的也是它；材质和红绿灯的深浅都跟窗口外观走。
+ * 'system' 交回系统（null），手动选了深 / 浅色就固定成对应外观。设置一次后在同一窗口内跨刷新保留。
  */
-function syncNativeBackground() {
+function syncNativeTheme(theme: AppSettings['theme']) {
   if (!isTauriRuntime()) return
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--background').trim()
-  if (!color) return
   try {
-    void getCurrentWebviewWindow()
-      .setBackgroundColor(color)
+    void getCurrentWindow()
+      .setTheme(theme === 'system' ? null : theme)
       .catch(() => {})
   } catch {
     /* 窗口句柄不可用（测试环境等）时忽略 */
@@ -140,14 +139,9 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
   const root = document.documentElement
   const next = resolveTheme(theme)
   rememberThemeForBoot(theme)
-  // theme-boot.js 铺的临时底色与 color-scheme 交还给样式表
-  root.style.removeProperty('background-color')
-  root.style.removeProperty('color-scheme')
-  if (root.getAttribute('data-theme') === next) {
-    // 启动脚本已经设对了 data-theme：仍要同步原生底色（这次进程里还没设过）
-    syncNativeBackground()
-    return
-  }
+  // 偏好变了就同步（比如 dark → system 而系统正好是深色：data-theme 不变，但窗口外观要交还给系统）
+  syncNativeTheme(theme)
+  if (root.getAttribute('data-theme') === next) return
   if (options?.animate && root.hasAttribute('data-theme')) {
     root.classList.add('ink-theme-transition')
     if (themeTransitionTimer) clearTimeout(themeTransitionTimer)
@@ -157,7 +151,38 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
     }, THEME_TRANSITION_MS)
   }
   root.setAttribute('data-theme', next)
-  syncNativeBackground()
+  // theme-boot.js 铺的临时底色还在（主界面还没渲染出来）：跟着换成新主题的颜色，收回见 releaseBootBackground
+  if (root.style.backgroundColor) {
+    // 样式表还没加载时读不到变量，保持原样，不能把临时底色清掉
+    const background = getComputedStyle(root).getPropertyValue('--background').trim()
+    if (background) root.style.backgroundColor = background
+    root.style.colorScheme = next
+  }
+}
+
+/** 淡出临时底色的时长：侧栏的材质慢慢透出来，而不是一下子从纸色跳成半透明 */
+const BOOT_BACKGROUND_FADE_MS = 180
+
+/**
+ * 收回 theme-boot.js 在 <html> 上铺的临时底色，交还给样式表。
+ * 要等主界面真正画出来再收：半透明侧栏下 body 是透明的，太早收回会露出整窗的系统材质（灰的一闪）。
+ * 由 App 里随主界面一起挂载的 BootBackgroundRelease 调用。
+ */
+export function releaseBootBackground() {
+  const root = document.documentElement
+  const clear = () => {
+    root.style.removeProperty('background-color')
+    root.style.removeProperty('color-scheme')
+    root.style.removeProperty('transition')
+  }
+  if (!root.style.backgroundColor) return
+  if (root.dataset.vibrancy !== 'true') {
+    clear()
+    return
+  }
+  root.style.transition = `background-color ${BOOT_BACKGROUND_FADE_MS}ms ease-out`
+  root.style.backgroundColor = 'transparent'
+  setTimeout(clear, BOOT_BACKGROUND_FADE_MS + 40)
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
