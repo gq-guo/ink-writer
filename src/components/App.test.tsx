@@ -192,7 +192,7 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
 
     const { container } = render(<App />)
     await waitFor(() => {
-      expect(screen.getByText('Start writing.')).toBeInTheDocument()
+      expect(screen.getByText('开始写作')).toBeInTheDocument()
     })
 
     // 模拟输入：经 documentStore.onEditorChange（编辑器每次击键都走这里）

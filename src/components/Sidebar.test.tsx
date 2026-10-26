@@ -41,14 +41,21 @@ const documents = [
 describe('Sidebar（spec W2）', () => {
   beforeEach(() => {
     invokeMock.mockReset()
+    // 每个用例自己定语言，不依赖上一个用例切过的 locale
+    syncLocale('zh-CN')
     useUiStore.setState({ sidebarVisible: true, sidebarWidth: 240 })
     useDocumentStore.setState({ documents, activeDocument: null })
   })
 
-  it('按 Today / Yesterday / Earlier 分组渲染', () => {
+  it('按 今天 / 昨天 / 更早 分组渲染（英文界面为 Today / Yesterday / Earlier）', () => {
+    const { unmount } = render(<Sidebar />)
+    expect(screen.getByText('今天')).toBeInTheDocument()
+    expect(screen.getByText('昨天')).toBeInTheDocument()
+    expect(screen.getByText('更早')).toBeInTheDocument()
+    unmount()
+    syncLocale('en')
     render(<Sidebar />)
     expect(screen.getByText('Today')).toBeInTheDocument()
-    expect(screen.getByText('Yesterday')).toBeInTheDocument()
     expect(screen.getByText('Earlier')).toBeInTheDocument()
   })
 
@@ -81,33 +88,33 @@ describe('Sidebar（spec W2）', () => {
   it('右键弹出 Open / 收藏 / Rename / Reveal in Finder / Move to Trash', () => {
     render(<Sidebar />)
     fireEvent.contextMenu(screen.getByText('今天的文档'))
-    expect(screen.getByText('Open')).toBeInTheDocument()
-    expect(screen.getByText('Add to Favorites')).toBeInTheDocument()
-    expect(screen.getByText('Rename…')).toBeInTheDocument()
-    expect(screen.getByText('Reveal in Finder')).toBeInTheDocument()
-    expect(screen.getByText('Move to Trash')).toBeInTheDocument()
+    expect(screen.getByText('打开')).toBeInTheDocument()
+    expect(screen.getByText('加入收藏')).toBeInTheDocument()
+    expect(screen.getByText('重命名…')).toBeInTheDocument()
+    expect(screen.getByText('在访达中显示')).toBeInTheDocument()
+    expect(screen.getByText('移到废纸篓')).toBeInTheDocument()
   })
 
   it('Documents 下是 All / Recent / Favorites 与数量，底部有 New Document', () => {
     render(<Sidebar />)
-    const all = screen.getByText('All').closest('button')!
+    const all = screen.getByText('全部').closest('button')!
     expect(all).toHaveAttribute('data-active', 'true')
     expect(all.querySelector('.ink-nav-count')?.textContent).toBe(
       String(useDocumentStore.getState().documents.length),
     )
-    expect(screen.getByText('Recent')).toBeInTheDocument()
-    expect(screen.getByText('Favorites')).toBeInTheDocument()
-    expect(screen.getByText('New Document')).toBeInTheDocument()
+    expect(screen.getByText('最近')).toBeInTheDocument()
+    expect(screen.getByText('收藏')).toBeInTheDocument()
+    expect(screen.getByText('新建文档')).toBeInTheDocument()
   })
 
   it('点 Documents 折叠 / 展开导航', () => {
     render(<Sidebar />)
-    const section = screen.getByText('Documents').closest('button')!
+    const section = screen.getByText('文档').closest('button')!
     fireEvent.click(section)
     expect(section).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('Recent')).toBeNull()
+    expect(screen.queryByText('最近')).toBeNull()
     fireEvent.click(section)
-    expect(screen.getByText('Recent')).toBeInTheDocument()
+    expect(screen.getByText('最近')).toBeInTheDocument()
   })
 
   it('Sidebar 隐藏时不占空间', () => {
