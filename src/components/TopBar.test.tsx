@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() =
 
 import { TopBar } from '@/components/TopBar'
 import { useDocumentStore } from '@/stores/documentStore'
+import { useEditorStore } from '@/stores/editorStore'
 import { useUiStore } from '@/stores/uiStore'
 import { syncLocale } from '@/lib/i18n'
 
@@ -127,5 +128,15 @@ describe('TopBar 文件名内联重命名', () => {
     const input = screen.getByDisplayValue('Untitled')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(renameDocument).not.toHaveBeenCalled()
+  })
+})
+
+describe('TopBar 模式胶囊', () => {
+  it('Focus Mode 不显示胶囊（只靠其余段落变淡表达）', () => {
+    useDocumentStore.setState({ activeDocument: DOC, saveState: 'idle' })
+    useEditorStore.setState({ focusMode: true })
+    const { container } = render(<TopBar />)
+    expect(container.querySelector('.ink-mode-pill')).toBeNull()
+    useEditorStore.setState({ focusMode: false })
   })
 })
