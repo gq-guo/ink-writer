@@ -25,6 +25,7 @@ import {
 import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 
+import { tagRangesIn } from './tags'
 import { TaskCheckboxWidget, taskMarkerOf } from './tasks'
 
 /** 可见区间外扩的行数（spec §18.2） */
@@ -433,6 +434,11 @@ export function buildDecorations(
         return true
       },
     })
+  }
+
+  // 行内标签 #tag（规则见 tags.ts）
+  for (const range of visibleRanges) {
+    for (const tag of tagRangesIn(state, range.from, range.to)) addMark(tag.from, tag.to, 'cm-md-tag')
   }
 
   // 临时空行自成一段时（上下都不挨着段落，比如连按两次回车）：打字后它会是一个新段落，

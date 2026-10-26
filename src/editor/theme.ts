@@ -114,6 +114,13 @@ export const inkThemeSpec = {
     textDecoration: 'line-through',
     textDecorationColor: 'var(--secondary)',
   },
+  // 行内标签：accent 色的淡底小块（不用彩色，朱砂只给光标和选区）
+  '.cm-md-tag': {
+    color: 'var(--accent)',
+    backgroundColor: 'var(--code-bg)',
+    borderRadius: '3px',
+    padding: '0 0.15em',
+  },
   // 任务框可点；已完成项的文字与删除线都用弱化色
   '.cm-md-task-marker': {
     cursor: 'pointer',

@@ -44,6 +44,7 @@ const view = new EditorView({
       getDocDir: () => '',
       onOpenUrl: () => {},
       onRevealPath: () => {},
+      onOpenTag: () => {},
       onError: () => {},
     }),
   }),

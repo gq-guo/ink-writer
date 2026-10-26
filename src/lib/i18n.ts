@@ -101,9 +101,12 @@ const zh: Record<string, string> = {
   'conflict.saveCopy': '另存副本…',
 
   // ── Quick Open ──
-  'quickOpen.placeholder': '搜索文档',
+  'quickOpen.placeholder': '搜索文档，# 开头搜标签',
   'quickOpen.empty': '没有匹配的文档',
+  'quickOpen.emptyTags': '没有这个标签',
   'quickOpen.contentGroup': '正文中',
+  'quickOpen.tagGroup': '标签',
+  'quickOpen.tagHitGroup': '段落',
 
   // ── 命令面板 ──
   'palette.placeholder': '搜索命令',
@@ -355,9 +358,12 @@ const en: Record<string, string> = {
   'conflict.loadDisk': 'Load Disk Version',
   'conflict.saveCopy': 'Save a Copy…',
 
-  'quickOpen.placeholder': 'Search documents',
+  'quickOpen.placeholder': 'Search documents, # for tags',
   'quickOpen.empty': 'No matching documents',
+  'quickOpen.emptyTags': 'No such tag',
   'quickOpen.contentGroup': 'In documents',
+  'quickOpen.tagGroup': 'Tags',
+  'quickOpen.tagHitGroup': 'Paragraphs',
 
   'palette.placeholder': 'Search commands',
   'palette.empty': 'No matching commands',

@@ -17,6 +17,8 @@ interface UiState {
   /** sidebarView 为 'folder' 时看的文件夹（dirPrefix 格式，如 "Project/"） */
   sidebarFolder: string
   quickOpenVisible: boolean
+  /** Quick Open 打开时预填的搜索词；空 = 保留上次的输入 */
+  quickOpenQuery: string
   paletteVisible: boolean
   settingsVisible: boolean
   conflictVisible: boolean
@@ -34,7 +36,8 @@ interface UiState {
   /** 侧栏切到某个文件夹 */
   openFolder: (prefix: string) => void
   setSidebarWidth: (width: number) => void
-  showQuickOpen: () => void
+  /** query：打开时预填的搜索词（⌘Click 标签时为 "#tag"） */
+  showQuickOpen: (query?: string) => void
   hideQuickOpen: () => void
   showPalette: () => void
   hidePalette: () => void
@@ -69,6 +72,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarView: 'all',
   sidebarFolder: '',
   quickOpenVisible: false,
+  quickOpenQuery: '',
   paletteVisible: false,
   settingsVisible: false,
   conflictVisible: false,
@@ -85,7 +89,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   setSidebarWidth: (width) =>
     set({ sidebarWidth: Math.min(SIDEBAR_WIDTH_RANGE.max, Math.max(SIDEBAR_WIDTH_RANGE.min, width)) }),
 
-  showQuickOpen: () => set({ quickOpenVisible: true, paletteVisible: false, settingsVisible: false }),
+  showQuickOpen: (query = '') =>
+    set({ quickOpenVisible: true, quickOpenQuery: query, paletteVisible: false, settingsVisible: false }),
   hideQuickOpen: () => set({ quickOpenVisible: false }),
   showPalette: () => set({ paletteVisible: true, quickOpenVisible: false, settingsVisible: false }),
   hidePalette: () => set({ paletteVisible: false }),

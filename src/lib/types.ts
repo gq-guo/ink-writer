@@ -102,6 +102,18 @@ export interface SearchHit {
   end: number
 }
 
+/** 标签搜索命中（start / end 是编辑器的文档位置） */
+export interface TagHit extends SearchHit {
+  /** 标签原文（不含 #） */
+  tag: string
+}
+
+/** 全库的一个标签与出现次数 */
+export interface TagCount {
+  tag: string
+  count: number
+}
+
 export interface Toast {
   id: number
   message: string

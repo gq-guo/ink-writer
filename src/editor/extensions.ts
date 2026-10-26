@@ -46,6 +46,7 @@ import { inkOutlinePlugin } from './outline'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
 import { inkSpellcheck, spellcheckCompartment } from './spellcheck'
 import { inkListKeymap } from './listKeys'
+import { inkTagHandler } from './tags'
 import { inkTaskClickHandler } from './tasks'
 
 export interface InkExtensionOptions {
@@ -67,6 +68,8 @@ export interface InkExtensionOptions {
   onOpenUrl: (url: string) => void
   /** 在 Finder 中显示 */
   onRevealPath: (path: string) => void
+  /** ⌘Click 标签（tag 不含 #） */
+  onOpenTag: (tag: string) => void
   /** 错误提示 */
   onError: (message: string) => void
 }
@@ -121,6 +124,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       onRevealPath: options.onRevealPath,
     }),
     inkTaskClickHandler,
+    inkTagHandler({ onOpenTag: options.onOpenTag }),
     inkDocHeader,
     inkOutlinePlugin(options.onOutline),
     placeholderCompartment.of(makePlaceholder(useLocaleStore.getState().locale)),

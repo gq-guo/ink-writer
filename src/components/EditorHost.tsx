@@ -124,6 +124,7 @@ export function EditorHost() {
           useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         })
       },
+      onOpenTag: (tag) => useUiStore.getState().showQuickOpen(`#${tag}`),
       onError: (message) => {
         useUiStore.getState().pushToast({ message, kind: 'error' })
       },
