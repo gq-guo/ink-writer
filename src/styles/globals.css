@@ -5,6 +5,10 @@
    - iA Writer Quattro：拉丁 + 常用符号（CJK 仍回落系统字体，这是设计预期 ——
      中西文混排时拉丁用 Quattro、中文用苹方）
    - JetBrains Mono：代码字体
+   - Noto Serif SC + Ink Serif Text（Source Serif 4 改名）：中英宋体组合
+   - 霞鹜文楷：中英一体的楷体
+   中文字体只保留《通用规范汉字表》8105 字 + 标点（scripts/subset-fonts.py），
+   表外生僻字回落到栈里的系统字体。许可证见 src/fonts/licenses/。
    之前的问题：栈里引用了字体名但系统未安装，拉丁/中文/代码分别回退到
    三种不同字体，看起来像「同时激活了三个字体」。
    ========================================================================== */
@@ -55,6 +59,65 @@
   font-family: 'JetBrains Mono';
   src: url('../fonts/jetbrains-Bold.woff2') format('woff2');
   font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+/* Source Serif 4 的拉丁子集。OFL 保留名「Source」：修改版（子集化）不得沿用原名，故改名 */
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-BoldItalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+/* 独立的 family 名，避免和用户自己装的完整版 Noto Serif SC 混用 */
+@font-face {
+  font-family: 'Ink Noto Serif SC';
+  src: url('../fonts/noto-serif-sc-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Noto Serif SC';
+  src: url('../fonts/noto-serif-sc-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink LXGW WenKai';
+  src: url('../fonts/lxgw-wenkai-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+/* 文楷没有 Bold：Medium 覆盖 500–900，粗体和标题直接用它，不让 WebKit 再合成假粗体 */
+@font-face {
+  font-family: 'Ink LXGW WenKai';
+  src: url('../fonts/lxgw-wenkai-Medium.woff2') format('woff2');
+  font-weight: 500 900;
   font-style: normal;
   font-display: swap;
 }
