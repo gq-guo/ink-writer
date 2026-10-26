@@ -750,13 +750,17 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-doc-item {
-  /* 单行：图标 · 标题 · 收藏 · 右对齐时间。没有底色，当前文档只靠左侧一道细墨线 */
+  /* 单行：标题 · 收藏 · 右对齐时间。条目两侧内缩 10px，选中底色不贴边；
+     文字落在 22px，与分组标题、Documents 共用一条左边缘 */
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 20px 6px 38px;
+  margin: 0 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: default;
+  transition: background-color 120ms ease;
 }
 
 .ink-doc-title {
@@ -779,16 +783,15 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-weight: 500;
 }
 
-/* 当前项的墨线（文档列表与 All / Recent / Favorites 共用） */
-.ink-doc-item[data-active='true']::before,
-.ink-nav-item[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: 28px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--foreground);
+/* 当前项：很淡的墨色底（文档列表与 All / Recent / Favorites 共用），悬停再淡一半 */
+.ink-doc-item:hover,
+.ink-nav-item:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, transparent);
+}
+
+.ink-doc-item[data-active='true'],
+.ink-nav-item[data-active='true'] {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
 .ink-doc-time {
@@ -799,13 +802,10 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-group-label {
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--secondary);
-  /* 与 Documents 的图标左对齐 */
-  padding: 20px 20px 6px 24px;
-  text-transform: uppercase;
+  /* 只是时间刻度，不做全大写加字距的标题：小号、常规字重、比次要文字再淡一档 */
+  font-size: 12px;
+  color: color-mix(in srgb, var(--secondary) 70%, var(--sidebar));
+  padding: 18px 22px 4px;
 }
 
 .ink-status-row {
@@ -1377,7 +1377,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 20px 18px 24px;
+  padding: 8px 22px 18px;
 }
 
 /* 墨色羽毛，不做彩色 logo */
@@ -1407,16 +1407,11 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 20px 6px 24px;
+  padding: 6px 22px;
   font-size: 15px;
   font-weight: 500;
   color: var(--foreground);
   text-align: left;
-}
-
-.ink-nav-section .ink-icon-file {
-  width: 15px;
-  height: 15px;
 }
 
 /* 折叠提示：放在右侧、很淡，鼠标移上来才明显 */
@@ -1445,12 +1440,16 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 6px 20px 6px 38px;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 14.5px;
   color: var(--sidebar-muted);
   text-align: left;
-  transition: color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .ink-nav-item:hover {
@@ -1462,16 +1461,14 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-weight: 500;
 }
 
-.ink-nav-item .ink-icon,
-.ink-doc-icon {
+.ink-nav-item .ink-icon {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--secondary);
 }
 
-.ink-nav-item[data-active='true'] .ink-icon,
-.ink-doc-item[data-active='true'] .ink-doc-icon {
+.ink-nav-item[data-active='true'] .ink-icon {
   color: var(--foreground);
 }
 
@@ -1484,7 +1481,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-sidebar-foot {
-  padding: 8px 12px 10px;
+  padding: 8px 10px 10px;
   border-top: 1px solid var(--border);
 }
 

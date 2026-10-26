@@ -21,7 +21,7 @@ import { inkSyntaxHighlighting } from '@/editor/highlight'
 import { setTypewriterModeEffect } from '@/editor/typewriter'
 import { centerCursorEffect } from '@/editor/centering'
 import { setDocHeaderEffect, type DocHeaderInfo } from '@/editor/docHeader'
-import { formatMetaTime, formatNumber } from '@/lib/format'
+import { formatMetaTime } from '@/lib/format'
 import { registerEditorBridge } from '@/editor/bridge'
 import { errorMessage } from '@/lib/errors'
 import { useDocumentStore } from '@/stores/documentStore'
@@ -302,19 +302,15 @@ export function EditorHost() {
 
   // ── 文档头（元信息行 / 文件名大标题），以块级 widget 放进编辑器 ──
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
-  const statistics = useEditorStore((state) => state.statistics)
-  // Focus Mode 下不显示元信息（效果图 1 只保留模式胶囊）
+  // Focus Mode 下不显示元信息（效果图 1 只保留模式胶囊）。
+  // 字数与阅读时长只放右下状态栏，这里不再重复
   const headerInfo: DocHeaderInfo | null =
     activeDocument && sidebarVisible && !focusMode
       ? {
           title: activeDocument.titleFromH1
             ? null
             : activeDocument.displayTitle || activeDocument.fileName,
-          meta: [
-            formatMetaTime(activeDocument.mtime),
-            `${formatNumber(statistics.words)} ${t('common.wordsUnit')}`,
-            `${statistics.readingMinutes} ${t('common.minReadUnit')}`,
-          ],
+          meta: [formatMetaTime(activeDocument.mtime)],
         }
       : null
   const headerKey = headerInfo ? JSON.stringify(headerInfo) : ''
