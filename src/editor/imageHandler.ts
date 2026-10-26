@@ -6,7 +6,7 @@
  * - 不渲染图片 widget（只做语法样式）
  */
 import { invoke } from '@tauri-apps/api/core'
-import { EditorView } from '@codemirror/view'
+import { EditorView, ViewPlugin } from '@codemirror/view'
 import { t } from '@/lib/i18n'
 import { errorMessage } from '@/lib/errors'
 
@@ -65,7 +65,31 @@ async function insertImages(
   view.focus()
 }
 
+/**
+ * 图片拖到正文以外（两侧空白、侧栏、顶栏）：插在光标处，而不是什么都不做。
+ * 挂在 document 上（冒泡）：正文里的拖放已经被上面的 drop 处理并取消了默认行为，这里跳过；
+ * window 上的 dropGuard 比这里更晚，兜底取消其余文件拖放的默认「打开文件」
+ */
+function outsideDropPlugin(options: ImageHandlerOptions) {
+  return ViewPlugin.define((view) => {
+    const onDrop = (event: DragEvent) => {
+      if (event.defaultPrevented) return
+      const files = Array.from(event.dataTransfer?.files ?? []).filter(isImage)
+      if (files.length === 0) return
+      event.preventDefault()
+      void insertImages(view, files, view.state.selection.main.head, options)
+    }
+    const doc = view.dom.ownerDocument
+    doc.addEventListener('drop', onDrop)
+    return { destroy: () => doc.removeEventListener('drop', onDrop) }
+  })
+}
+
 export function inkImageHandler(options: ImageHandlerOptions) {
+  return [outsideDropPlugin(options), inkImageDomHandlers(options)]
+}
+
+function inkImageDomHandlers(options: ImageHandlerOptions) {
   return EditorView.domEventHandlers({
     drop(event, view) {
       const files = Array.from(event.dataTransfer?.files ?? []).filter(isImage)

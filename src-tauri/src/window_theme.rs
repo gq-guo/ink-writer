@@ -42,6 +42,9 @@ pub fn create_main_window(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     // None = 跟随系统外观，材质与红绿灯自然跟着系统走
     WebviewWindowBuilder::from_config(app.handle(), config)?
         .theme(stored_theme(app))
+        // 不让页面跳到本地文件：拖进来的图片 / 文件没被前端接住时，WebKit 默认会打开它，
+        // 整个 App 被一张图片顶掉、回不去（前端也拦了拖放，这里兜底）
+        .on_navigation(allows_navigation)
         .build()?;
     Ok(())
 }
@@ -86,5 +89,25 @@ mod tests {
         assert_eq!(main["transparent"], true);
         assert_eq!(main["windowEffects"]["effects"], json!(["sidebar"]));
         assert_eq!(conf["app"]["macOSPrivateApi"], true);
+    }
+}
+
+/// 主窗口只允许停在应用自己的页面上：拒绝 file: 地址（拖进来的文件）
+fn allows_navigation(url: &tauri::Url) -> bool {
+    url.scheme() != "file"
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+
+    #[test]
+    fn blocks_local_files_but_keeps_the_app_pages() {
+        let parse = |s: &str| tauri::Url::parse(s).unwrap();
+        assert!(!allows_navigation(&parse(
+            "file:///Users/me/Pictures/icon.png"
+        )));
+        assert!(allows_navigation(&parse("tauri://localhost/index.html")));
+        assert!(allows_navigation(&parse("http://localhost:1420/")));
     }
 }
