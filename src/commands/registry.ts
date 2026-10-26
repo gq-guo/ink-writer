@@ -141,7 +141,11 @@ export function buildCommands(): Command[] {
         const state = useDocumentStore.getState()
         const active = state.activeDocument
         if (!active) return
-        const html = buildStandaloneHtml(active.displayTitle, editorBridge.getContent() || active.content)
+        const html = buildStandaloneHtml(
+          active.displayTitle,
+          editorBridge.getContent() || active.content,
+          useSettingsStore.getState().settings.fontFamily,
+        )
         const docDir = active.path.slice(0, active.path.lastIndexOf('/'))
         try {
           // 保存对话框由 Rust 弹出：write_text_file 只能写到这里选定的目标
@@ -172,7 +176,11 @@ export function buildCommands(): Command[] {
         const state = useDocumentStore.getState()
         const active = state.activeDocument
         if (!active) return
-        const html = buildStandaloneHtml(active.displayTitle, editorBridge.getContent() || active.content)
+        const html = buildStandaloneHtml(
+          active.displayTitle,
+          editorBridge.getContent() || active.content,
+          useSettingsStore.getState().settings.fontFamily,
+        )
         const root = document.createElement('div')
         root.className = 'ink-print-root'
         root.innerHTML = html

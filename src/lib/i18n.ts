@@ -41,7 +41,7 @@ const zh: Record<string, string> = {
   'sidebar.empty.favorites': '还没有收藏',
   'sidebar.group.today': 'Today',
   'sidebar.group.yesterday': 'Yesterday',
-  'sidebar.group.thisWeek': 'Last 7 Days',
+  'sidebar.group.thisWeek': 'Last 7 days',
   'sidebar.group.earlier': 'Earlier',
   'sidebar.collapse': '折叠侧边栏',
   'sidebar.context.open': 'Open',
@@ -73,6 +73,8 @@ const zh: Record<string, string> = {
   'type.font.quattro': 'iA Writer Quattro',
   'type.font.system': '系统字体',
   'type.font.serif': '衬线体',
+  'type.font.noto': 'Noto 宋体',
+  'type.font.wenkai': '霞鹜文楷',
   'type.font.mono': '等宽字体',
 
   // ── 状态栏 / 统计卡 ──
@@ -302,7 +304,7 @@ const en: Record<string, string> = {
   'sidebar.empty.favorites': 'No favorites yet',
   'sidebar.group.today': 'Today',
   'sidebar.group.yesterday': 'Yesterday',
-  'sidebar.group.thisWeek': 'Last 7 Days',
+  'sidebar.group.thisWeek': 'Last 7 days',
   'sidebar.group.earlier': 'Earlier',
   'sidebar.collapse': 'Collapse Sidebar',
   'sidebar.context.open': 'Open',
@@ -332,6 +334,8 @@ const en: Record<string, string> = {
   'type.font.quattro': 'iA Writer Quattro',
   'type.font.system': 'System',
   'type.font.serif': 'Serif',
+  'type.font.noto': 'Noto Serif',
+  'type.font.wenkai': 'LXGW WenKai',
   'type.font.mono': 'Monospace',
 
   'stats.words': 'Words',

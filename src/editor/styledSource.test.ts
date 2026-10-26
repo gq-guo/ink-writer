@@ -281,3 +281,62 @@ describe('光标外隐藏 Markdown 标记', () => {
     expect(concealed('#\n\n正文', 5)).toEqual([])
   })
 })
+
+describe('标记外悬（列表符号 / 标题 #）', () => {
+  /** 行装饰的 style（零长度区间）与外悬定宽盒（cm-md-hang 标记：盒内文字 → 宽度） */
+  function decorate(doc: string, cursor: number, conceal = true) {
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [markdown({ base: markdownLanguage }), concealMarkupFacet.of(conceal)],
+    })
+    const lines = new Map<number, string>()
+    const boxes = new Map<string, string>()
+    const iter = buildDecorations(state, [{ from: 0, to: state.doc.length }]).iter()
+    while (iter.value) {
+      const spec = (iter.value as { spec?: { class?: string; attributes?: { style?: string } } }).spec
+      const style = spec?.attributes?.style
+      if (style && iter.from === iter.to) lines.set(state.doc.lineAt(iter.from).number, style)
+      if (style && spec?.class === 'cm-md-hang') boxes.set(doc.slice(iter.from, iter.to), style)
+      iter.next()
+    }
+    return { lines, boxes }
+  }
+  const lineStyles = (doc: string, cursor: number, conceal = true) => decorate(doc, cursor, conceal).lines
+
+  it('标记连同空格放进正好 Nch 宽的盒子，文字精确落在左边缘', () => {
+    expect(decorate('- 列表项', 0).boxes.get('- ')).toBe('width:2ch')
+    expect(decorate('10. 第十项', 0).boxes.get('10. ')).toBe('width:4ch')
+    expect(decorate('## 标题', 1).boxes.get('## ')).toBe('width:3ch')
+    // # 已隐藏的标题行不需要盒子
+    expect(decorate('## 标题\n\n正文', 9).boxes.has('## ')).toBe(false)
+  })
+
+  it('顶层列表：文字落在正文左边缘，「- 」挂在左边距里', () => {
+    const style = lineStyles('段落\n\n- 列表项', 0).get(3)!
+    expect(style).toContain('padding-left:calc(0.00em + 0ch)')
+    expect(style).toContain('text-indent:calc(-1 * (0.00em + 0ch + 2ch))')
+  })
+
+  it('嵌套列表：折行对齐到本级文字，只把标记挂出去', () => {
+    const style = lineStyles('- 一级\n  - 二级', 0).get(2)!
+    expect(style).toContain('padding-left:calc(1.20em + 0ch)')
+    expect(style).toContain('text-indent:calc(-1 * (1.20em + 0ch + 2ch))')
+  })
+
+  it('有序列表按标记长度外悬', () => {
+    expect(lineStyles('10. 第十项', 0).get(1)).toContain('+ 4ch))')
+  })
+
+  it('光标所在的标题行：「## 」外悬，文字不随光标进出移动', () => {
+    expect(lineStyles('## 标题\n\n正文', 1).get(1)).toBe('text-indent:-3ch')
+  })
+
+  it('光标不在的标题行：# 已隐藏，不加外悬', () => {
+    expect(lineStyles('## 标题\n\n正文', 9).has(1)).toBe(false)
+  })
+
+  it('关闭隐藏标记时，所有 ATX 标题都外悬', () => {
+    expect(lineStyles('# 一\n\n### 三\n\n正文', 12, false).get(3)).toBe('text-indent:-4ch')
+  })
+})

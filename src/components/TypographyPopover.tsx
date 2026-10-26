@@ -13,6 +13,8 @@ const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string> = {
   system: 'type.font.system',
   quattro: 'type.font.quattro',
   serif: 'type.font.serif',
+  noto: 'type.font.noto',
+  wenkai: 'type.font.wenkai',
   mono: 'type.font.mono',
 }
 
