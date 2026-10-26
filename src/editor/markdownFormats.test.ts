@@ -6,10 +6,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { ensureSyntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 
 import { buildDecorations, concealMarkupFacet } from '@/editor/styledSource'
 
@@ -24,13 +24,26 @@ interface RenderedLine {
   marks: [string, string][]
 }
 
-function render(cursor = DOC.length, conceal = true): Map<string, RenderedLine> {
-  const state = EditorState.create({
+/**
+ * 建一个语法树完整的 state。
+ * EditorState.create 只在很短的时间预算里解析，慢机器（CI）上可能只解析了开头一小段；
+ * ensureSyntaxTree 只推进解析上下文，不会改这个 state 里的树 —— 必须再走一个事务，
+ * state 才拿到完整的树。否则后面几行（引用、代码块、表格……）的装饰都是空的。
+ */
+function fullyParsedState(cursor: number, conceal: boolean): EditorState {
+  const created = EditorState.create({
     doc: DOC,
     selection: { anchor: cursor },
     extensions: [markdown({ base: markdownLanguage }), concealMarkupFacet.of(conceal)],
   })
-  ensureSyntaxTree(state, DOC.length, 5000)
+  ensureSyntaxTree(created, DOC.length, 5000)
+  const state = created.update({}).state
+  expect(syntaxTree(state).length, '语法树应覆盖整篇夹具').toBe(DOC.length)
+  return state
+}
+
+function render(cursor = DOC.length, conceal = true): Map<string, RenderedLine> {
+  const state = fullyParsedState(cursor, conceal)
   const hidden: [number, number][] = []
   const lineClasses = new Map<number, string[]>()
   const marks: [number, number, string][] = []
@@ -243,5 +256,21 @@ describe('Markdown 全格式：光标所在行与设置', () => {
   it('设置「显示 Markdown 标记」时全文都不隐藏', () => {
     const all = render(DOC.length, false)
     for (const [text, rendered] of all) expect(rendered.shown).toBe(text)
+  })
+})
+
+describe('慢机器上也能拿到完整语法树（CI 曾因此偶发失败）', () => {
+  it('初次解析只解析了开头一小段时，render 仍按整篇夹具出结果', () => {
+    // 让 Date.now 每次前进 50ms：EditorState.create 的解析预算立刻用完，只解析开头
+    let now = Date.now()
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => (now += 50))
+    let lines: Map<string, RenderedLine>
+    try {
+      lines = render()
+    } finally {
+      spy.mockRestore()
+    }
+    const quote = [...lines.values()].find((line) => line.lineClasses.includes('quote'))
+    expect(quote, '文末附近的引用块也应带上样式').toBeDefined()
   })
 })
