@@ -56,7 +56,7 @@ export function topLevelBlockAt(tree: Tree, pos: number): SyntaxNode | null {
 /**
  * 当前块：光标所在的最外层块。
  * 光标在空行上时（比如段落末尾刚按了回车），空行不属于任何块：
- * 改为取紧挨着这一行的上 / 下块 —— 接着打字时内容正是并入它们，竖线前后连贯；
+ * 改为取紧挨着这一行的上 / 下块 —— 接着打字时内容正是并入它们，亮起的范围前后连贯；
  * 中间隔了空行（连按两次回车 = 开始新段落）则不算，只标当前空行。
  */
 function activeBlocksAt(state: EditorState, tree: Tree, head: number): SyntaxNode[] {
@@ -110,7 +110,7 @@ export function computeFocusDecorations(
 
   // 行号 → class；同一行只取一个（块边界可能落在同一行）
   const lineClasses = new Map<number, string>()
-  // 光标所在的空行不属于任何块，也要带竖线（否则换行后、打字前竖线会消失）
+  // 光标所在的空行不属于任何块，也标为当前块，保证光标所在行总有 ink-focus-active
   const cursorLine = state.doc.lineAt(head)
   if (cursorLine.text.trim() === '') lineClasses.set(cursorLine.number, 'ink-focus-active')
 
@@ -119,7 +119,7 @@ export function computeFocusDecorations(
       const isActive = activeBlocks.some(
         (active) => block.from === active.from && block.to === active.to,
       )
-      // 当前块用 accent 竖线标识（效果图 1），其余块变淡
+      // 当前块保持原样，其余块变淡
       const cls = isActive ? 'ink-focus-active' : 'ink-focus-dim'
       const firstLine = state.doc.lineAt(block.from).number
       const lastLine = state.doc.lineAt(block.to).number
@@ -161,7 +161,7 @@ export const inkFocusModePlugin = ViewPlugin.fromClass(
       }
 
       if (update.docChanged && update.startState.doc.lines !== update.state.doc.lines) {
-        // 换行 / 合并行：新行要立刻带上竖线，不等防抖（否则新行会空 100ms）
+        // 换行 / 合并行：行号整体移动，立刻重算，不等防抖（否则会有 100ms 的 class 错位）
         this.recompute(update.view)
         return
       }

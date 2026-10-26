@@ -123,7 +123,6 @@
   --ink-icon-more: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='3.2' cy='8' r='1.15' fill='%23000'/%3E%3Ccircle cx='8' cy='8' r='1.15' fill='%23000'/%3E%3Ccircle cx='12.8' cy='8' r='1.15' fill='%23000'/%3E%3C/svg%3E");
   --ink-icon-feather: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.5 2.5c-4 .3-7 2.2-8.7 5.4-.7 1.3-.9 2.8-1 4.3 1.2-.3 2.3-.7 3.2-1.2 2.6-1.5 5.5-5.2 6.5-8.5Z' fill='none' stroke='%23000' stroke-width='1.3' stroke-linejoin='round'/%3E%3Cpath d='M2 14 8.6 7.4' fill='none' stroke='%23000' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");
   --ink-icon-panel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='2.8' width='12' height='10.4' rx='1.6' fill='none' stroke='%23000' stroke-width='1.3'/%3E%3Cpath d='M6.2 2.8v10.4' fill='none' stroke='%23000' stroke-width='1.3'/%3E%3C/svg%3E");
-  --ink-icon-target: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5.4' fill='none' stroke='%23000' stroke-width='1.3'/%3E%3Ccircle cx='8' cy='8' r='1.7' fill='%23000'/%3E%3C/svg%3E");
   --ink-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3.5 8.4 3 3 6-6.8' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ink-icon-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='none' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E");
 
@@ -660,15 +659,9 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   transition: opacity 220ms ease;
 }
 
+/* 只靠其余块变淡表达焦点；当前块（.ink-focus-active）不加竖线等任何标记 */
 .cm-content .ink-focus-dim {
   opacity: 0.35;
-}
-
-/* 当前块：左侧一道细墨线（效果图 1） */
-.cm-content .ink-focus-active {
-  border-left: 2px solid color-mix(in srgb, var(--foreground) 70%, transparent);
-  margin-left: -14px;
-  padding-left: 12px;
 }
 
 /* ==========================================================================
@@ -1229,7 +1222,6 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 .ink-icon-more { -webkit-mask-image: var(--ink-icon-more); mask-image: var(--ink-icon-more); }
 .ink-icon-feather { -webkit-mask-image: var(--ink-icon-feather); mask-image: var(--ink-icon-feather); }
 .ink-icon-panel { -webkit-mask-image: var(--ink-icon-panel); mask-image: var(--ink-icon-panel); }
-.ink-icon-target { -webkit-mask-image: var(--ink-icon-target); mask-image: var(--ink-icon-target); }
 .ink-icon-check { -webkit-mask-image: var(--ink-icon-check); mask-image: var(--ink-icon-check); }
 .ink-icon-circle { -webkit-mask-image: var(--ink-icon-circle); mask-image: var(--ink-icon-circle); }
 .ink-icon-search { -webkit-mask-image: var(--ink-icon-search); mask-image: var(--ink-icon-search); }

@@ -2,10 +2,11 @@
  * 顶栏
  *
  * 左：文档图标 + 文件名（点击就地内联编辑，Finder 风格）
- * 中：Focus Mode 状态胶囊；右：搜索 / 排版 / 更多
+ * 中：打字机模式胶囊；右：搜索 / 排版 / 更多
  *
  * 文件名与右侧工具默认隐藏，鼠标移到窗口顶部才慢慢浮现（⌘K 覆盖绝大多数操作）；
- * 模式胶囊是状态提示，始终可见。
+ * 模式胶囊是状态提示，始终可见。Focus Mode 不加胶囊：其余段落变淡本身就是提示，
+ * 再宣告一次反而打断专注。
  *
  * 注意：window.prompt 在 Tauri 的 WKWebView 里不受支持（返回 null），
  * 所有重命名入口（顶栏点击 / 更多菜单 / 命令面板）统一走内联编辑。
@@ -13,7 +14,6 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { useDocumentStore } from '@/stores/documentStore'
-import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
@@ -32,7 +32,6 @@ export function TopBar() {
   const [revealed, setRevealed] = useState(false)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const renameDocument = useDocumentStore((state) => state.renameDocument)
-  const focusMode = useEditorStore((state) => state.focusMode)
   const typewriterMode = useSettingsStore((state) => state.settings.typewriterMode)
   const showQuickOpen = useUiStore((state) => state.showQuickOpen)
   const renameSignal = useUiStore((state) => state.renameSignal)
@@ -146,12 +145,6 @@ export function TopBar() {
       </div>
 
       <div className="ink-topbar-center">
-        {focusMode ? (
-          <span className="ink-mode-pill">
-            <span className="ink-icon ink-icon-target" aria-hidden />
-            {t('topbar.focusMode')}
-          </span>
-        ) : null}
         {typewriterMode ? (
           <span className="ink-mode-pill">
             <span className="ink-icon ink-icon-feather" aria-hidden />
