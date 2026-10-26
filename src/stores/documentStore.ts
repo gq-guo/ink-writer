@@ -39,6 +39,10 @@ const MAX_RETRIES = 3
 const SAVED_LINGER_MS = 1500
 /** 新文档按第一行自动命名：停笔这么久之后再改文件名 */
 const AUTO_NAME_DEBOUNCE_MS = 1000
+/** 离开前落盘最多等这么久（网络盘卡住时不能把切换 / 退出一起卡死） */
+const LEAVE_FLUSH_TIMEOUT_MS = 5000
+/** 写入失败被拦下后，这段时间内再操作一次视为放弃未保存的修改 */
+const DISCARD_CONFIRM_MS = 10_000
 
 export interface FsEventPayload {
   path: string
@@ -60,6 +64,11 @@ interface DocumentState {
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
   onEditorChange: (text: string) => void
   flushSave: () => Promise<void>
+  /**
+   * 离开当前文档（切换 / 新建 / 换库 / 退出）前调用：先落盘，没存上就拦下并提示。
+   * 返回 true 才能继续。
+   */
+  prepareToLeave: () => Promise<boolean>
   /** auto：自动命名（按第一行）发起的改名，不提示撞名、也不会停止自动命名 */
   renameDocument: (path: string, newName: string, options?: { auto?: boolean }) => Promise<void>
   deleteDocument: (path: string) => Promise<void>
@@ -104,6 +113,8 @@ let autoNameTimer: ReturnType<typeof setTimeout> | null = null
  */
 let autoNamedPath: string | null = null
 let retryCount = 0
+/** 写入失败时拦下离开操作的时间：DISCARD_CONFIRM_MS 内再来一次就放行 */
+let discardArmedAt = 0
 
 function clearSaveTimer() {
   if (saveTimer) {
@@ -156,7 +167,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   changeLibrary: async () => {
-    await get().flushSave()
+    if (!(await get().prepareToLeave())) return
     let result: { path: string; copied: number; skipped: number } | null
     try {
       result = await invoke<{ path: string; copied: number; skipped: number } | null>(
@@ -207,7 +218,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   createDocument: async () => {
     const { libraryPath } = get()
     if (!libraryPath) return
-    await get().flushSave()
+    if (!(await get().prepareToLeave())) return
     try {
       const meta = await invoke<DocumentMeta>('create_document', {
         dir: libraryPath,
@@ -224,7 +235,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
    * 打开文档
    */
   openDocument: async (path: string, revealRange?: [number, number]) => {
-    await get().flushSave()
+    // 已经是当前文档：不重新加载（会丢光标、滚动和撤销历史），只定位
+    if (get().activeDocument?.path === path) {
+      if (revealRange) editorBridge.revealRange(revealRange)
+      return
+    }
+    if (!(await get().prepareToLeave())) return
     try {
       const result = await invoke<ReadDocumentResult>('read_document', { path })
       const fileName = path.split('/').pop() ?? path
@@ -293,6 +309,39 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     clearSaveTimer()
     writeChain = writeChain.then(doWrite, doWrite)
     return writeChain
+  },
+
+  prepareToLeave: async () => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([
+      get().flushSave(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, LEAVE_FLUSH_TIMEOUT_MS)
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+
+    const state = get().saveState
+    if (state === 'conflict') {
+      // 冲突对话框还开着：必须先选，切走后对话框会作用到别的文档上
+      useUiStore.getState().pushToast({ message: t('toast.leaveConflict'), kind: 'error' })
+      return false
+    }
+    if (pendingText === null && state !== 'error' && state !== 'saving' && state !== 'dirty') {
+      discardArmedAt = 0
+      return true
+    }
+    // 写入失败（目录被移走、磁盘满……）：先拦下；短时间内再来一次才放弃，免得卡死在这篇上
+    if (discardArmedAt > 0 && Date.now() - discardArmedAt < DISCARD_CONFIRM_MS) {
+      discardArmedAt = 0
+      pendingText = null
+      clearRetryTimer()
+      set({ saveState: 'idle' })
+      return true
+    }
+    discardArmedAt = Date.now()
+    useUiStore.getState().pushToast({ message: t('toast.leaveUnsaved'), kind: 'error' })
+    return false
   },
 
   renameDocument: async (path: string, newName: string, options?: { auto?: boolean }) => {
@@ -557,8 +606,10 @@ async function writeActiveDocument(
     lastWrittenText = content
     retryCount = 0
     clearRetryTimer()
+    // 写盘期间又打了字：还没全部落盘，别显示「已保存」
+    const newerPending = pendingText !== null && pendingText !== content
     useDocumentStore.setState((s) => ({
-      saveState: 'saved',
+      saveState: newerPending ? 'dirty' : 'saved',
       activeDocument:
         s.activeDocument && s.activeDocument.path === active.path
           ? { ...s.activeDocument, mtime: result.mtime }
@@ -572,8 +623,8 @@ async function writeActiveDocument(
   } catch (error) {
     const conflict = isConflictError(error)
     if (conflict) {
-      // 保留内存内容，等待用户选择
-      pendingText = content
+      // 保留内存内容，等待用户选择（写盘期间又打的字更新，不能被这次的旧内容盖掉）
+      pendingText ??= content
       let diskContent = ''
       let diskMtime = conflict.diskMtime
       try {
@@ -592,7 +643,7 @@ async function writeActiveDocument(
       return
     }
 
-    pendingText = content
+    pendingText ??= content
     useDocumentStore.setState({ saveState: 'error' })
     useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
 

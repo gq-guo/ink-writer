@@ -16,6 +16,7 @@ import {
 
 import { dispatchCommand } from '@/commands/dispatch'
 import { t, useLocaleStore } from '@/lib/i18n'
+import { quitAfterSave } from '@/lib/quit'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -85,7 +86,13 @@ async function buildAndInstall(): Promise<void> {
       native('HideOthers', t('mb.hideOthers')),
       native('ShowAll', t('mb.showAll')),
       separator(),
-      native('Quit', t('mb.quit', { name })),
+      // 不用系统自带的 Quit：它直接结束进程，来不及把正文落盘
+      {
+        id: 'app.quit',
+        text: t('mb.quit', { name }),
+        accelerator: 'CmdOrCtrl+Q',
+        action: () => void quitAfterSave(),
+      },
     ],
   })
 

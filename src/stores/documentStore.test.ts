@@ -491,3 +491,134 @@ describe('重命名撞名（spec §7.2：重名自动加 -2）', () => {
     )
   })
 })
+
+describe('离开当前文档前必须落盘', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  function mockDisk(options: { writeFails?: boolean } = {}) {
+    const reads: string[] = []
+    invokeMock.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+      switch (command) {
+        case 'read_document':
+          reads.push(String(args.path))
+          return { content: 'original', encoding: 'utf-8', mtime: 1000, size: 8, lineEnding: 'lf' }
+        case 'write_document':
+          if (options.writeFails) throw { kind: 'message', data: 'disk full' }
+          return { mtime: 1001 }
+        default:
+          return undefined
+      }
+    })
+    return { reads }
+  }
+
+  async function messages() {
+    const { useUiStore } = await import('@/stores/uiStore')
+    return useUiStore.getState().toasts.map((toast) => toast.message)
+  }
+
+  it('写入失败时拦下切换；10 秒内再切一次才放弃未保存的修改', async () => {
+    mockDisk({ writeFails: true })
+    const { documentStore } = await loadStores()
+    const { t } = await import('@/lib/i18n')
+    await documentStore.getState().openDocument('/library/Note.md')
+    documentStore.getState().onEditorChange('unsaved words')
+
+    await documentStore.getState().openDocument('/library/Other.md')
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Note.md')
+    expect(await messages()).toContain(t('toast.leaveUnsaved'))
+
+    await documentStore.getState().openDocument('/library/Other.md')
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Other.md')
+    expect(documentStore.getState().saveState).toBe('idle')
+  })
+
+  it('冲突未决时一律拦下：新建 / 切换都不能把冲突对话框留给别的文档', async () => {
+    const { reads } = mockDisk()
+    const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Note.md')
+    documentStore.setState({ saveState: 'conflict' })
+
+    await documentStore.getState().openDocument('/library/Other.md')
+    await documentStore.getState().openDocument('/library/Other.md')
+    await documentStore.getState().createDocument()
+
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Note.md')
+    expect(reads).toEqual(['/library/Note.md'])
+    expect(invokeMock.mock.calls.some((call) => call[0] === 'create_document')).toBe(false)
+  })
+
+  it('点当前已打开的文档不重新加载（光标、撤销历史都保留）', async () => {
+    const { reads } = mockDisk()
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
+    const before = documentStore.getState().activeDocument!
+
+    await documentStore.getState().openDocument('/library/Note.md')
+
+    expect(reads).toEqual(['/library/Note.md'])
+    expect(documentStore.getState().activeDocument!.openSeq).toBe(before.openSeq)
+  })
+
+  it('写盘失败时不拿旧内容覆盖写盘期间新打的字', async () => {
+    const { documentStore } = await loadStores()
+    let failWrite: ((error: unknown) => void) | null = null
+    let writeCount = 0
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'read_document') {
+        return { content: '', encoding: 'utf-8', mtime: 1000, size: 0, lineEnding: 'lf' }
+      }
+      if (command === 'write_document') {
+        writeCount += 1
+        if (writeCount === 1) {
+          return new Promise((_, reject) => {
+            failWrite = reject
+          })
+        }
+        return { mtime: 1001 }
+      }
+      return undefined
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await documentStore.getState().openDocument(DOC.path)
+    documentStore.getState().onEditorChange('first')
+    await vi.advanceTimersByTimeAsync(500)
+    documentStore.getState().onEditorChange('first second')
+    failWrite!({ kind: 'message', data: 'disk busy' })
+    await vi.advanceTimersByTimeAsync(500)
+
+    const writes = invokeMock.mock.calls.filter((call) => call[0] === 'write_document')
+    const last = writes[writes.length - 1]![1] as { content: string }
+    expect(last.content).toBe('first second')
+  })
+
+  it('写盘期间又打了字：这次写完仍是 dirty，不显示「已保存」', async () => {
+    const { documentStore } = await loadStores()
+    let resolveWrite: ((value: { mtime: number }) => void) | null = null
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'read_document') {
+        return { content: '', encoding: 'utf-8', mtime: 1000, size: 0, lineEnding: 'lf' }
+      }
+      if (command === 'write_document') {
+        return new Promise((resolve) => {
+          resolveWrite = resolve
+        })
+      }
+      return undefined
+    })
+
+    await documentStore.getState().openDocument(DOC.path)
+    documentStore.getState().onEditorChange('first')
+    await vi.advanceTimersByTimeAsync(500)
+    documentStore.getState().onEditorChange('first second')
+    resolveWrite!({ mtime: 1001 })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(documentStore.getState().saveState).toBe('dirty')
+  })
+})
