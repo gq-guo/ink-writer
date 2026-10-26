@@ -383,7 +383,8 @@ fn is_same_file(a: &Path, b: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/** 复制整个文档库（更换保存位置用）：复制 .md 与 assets，重名跳过，不删除旧库 */
+/** 复制整个文档库（更换保存位置用）：复制全部文件（.md、assets 里的图片等），重名跳过，不删除旧库；
+ *  copied / skipped 只统计 .md，给提示文案用 */
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyStats {
@@ -419,12 +420,18 @@ fn copy_library_inner(from: &Path, to: &Path, stats: &mut CopyStats) -> Result<(
             // 只复制文档内容（.md 与 assets 等媒体目录），其他目录也一并复制以保持相对结构
             fs::create_dir_all(&target).map_err(|e| io_message(&target, &e))?;
             copy_library_inner(&source, &target, stats)?;
-        } else if file_type.is_file() && is_markdown(&name) {
+        } else if file_type.is_file() {
+            // 图片等附件也要带过去，否则新库里的 ![](assets/x.png) 全部失效
+            let markdown = is_markdown(&name);
             if target.exists() {
-                stats.skipped += 1;
+                if markdown {
+                    stats.skipped += 1;
+                }
             } else {
                 fs::copy(&source, &target).map_err(|e| io_message(&source, &e))?;
-                stats.copied += 1;
+                if markdown {
+                    stats.copied += 1;
+                }
             }
         }
     }
@@ -481,10 +488,18 @@ pub fn copy_image_bytes(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "image.png".into());
+    // 空格、括号等在 Markdown 链接目标里要转义才合法（macOS 截图名全是空格）：直接换成 -
     let safe: String = base
         .chars()
-        .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+        .map(|c| {
+            if c.is_whitespace() || "/\\:*?\"<>|()[]#%".contains(c) {
+                '-'
+            } else {
+                c
+            }
+        })
         .collect();
+    let safe = safe.trim_start_matches(['.', '-']).to_string();
     let safe = if safe.is_empty() {
         "image.png".to_string()
     } else {
@@ -640,10 +655,12 @@ mod tests {
         let from = dir.join("from");
         let to = dir.join("to");
         fs::create_dir_all(from.join("sub")).unwrap();
+        fs::create_dir_all(from.join("assets")).unwrap();
         fs::create_dir_all(&to).unwrap();
         fs::write(from.join("a.md"), "a").unwrap();
         fs::write(from.join("sub/b.md"), "b").unwrap();
         fs::write(from.join("notes.txt"), "t").unwrap();
+        fs::write(from.join("assets/shot.png"), b"png").unwrap();
         // 目标已存在同名文件 → 跳过
         fs::write(to.join("a.md"), "old").unwrap();
 
@@ -652,6 +669,9 @@ mod tests {
         assert_eq!(stats.skipped, 1);
         assert_eq!(fs::read_to_string(to.join("sub/b.md")).unwrap(), "b");
         assert_eq!(fs::read_to_string(to.join("a.md")).unwrap(), "old");
+        // 附件一起复制（不计入文档数）
+        assert_eq!(fs::read(to.join("assets/shot.png")).unwrap(), b"png");
+        assert!(to.join("notes.txt").exists());
         // 旧库不受影响
         assert!(from.join("a.md").exists());
         let _ = fs::remove_dir_all(&dir);
@@ -666,6 +686,19 @@ mod tests {
         let b = copy_image_bytes(&doc_dir, "shot.png", b"png").unwrap();
         assert_eq!(a, "assets/shot.png");
         assert_eq!(b, "assets/shot-2.png");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_image_bytes_makes_markdown_safe_names() {
+        let dir = temp_dir("image-names");
+        let doc_dir = dir.join("doc");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let rel =
+            copy_image_bytes(&doc_dir, "Screenshot 2026-10-26 at 10.00 (2).png", b"x").unwrap();
+        assert_eq!(rel, "assets/Screenshot-2026-10-26-at-10.00--2-.png");
+        let hidden = copy_image_bytes(&doc_dir, ".secret.png", b"x").unwrap();
+        assert_eq!(hidden, "assets/secret.png");
         let _ = fs::remove_dir_all(&dir);
     }
 

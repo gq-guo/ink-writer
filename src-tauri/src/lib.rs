@@ -179,6 +179,15 @@ async fn change_library(
     let target = access::normalize(&picked)?;
 
     let current = lock(&state).library().map(Path::to_path_buf);
+    // 新旧位置互相包含：复制时会把刚复制出来的目录再复制一遍，一路嵌套到路径超长
+    if let Some(old) = &current {
+        if old != &target && (target.starts_with(old) || old.starts_with(&target)) {
+            return Err(CommandError::new(
+                "libraryNested",
+                target.display().to_string(),
+            ));
+        }
+    }
     let stats = match &current {
         Some(old) if old != &target => fs_ops::copy_library(old, &target)?,
         _ => fs_ops::CopyStats {

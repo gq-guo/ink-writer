@@ -10,10 +10,21 @@ export function sanitizeFileName(name: string): string {
   return cleaned.replace(/^\.+/, '').trim()
 }
 
-/** 保证扩展名为 .md */
-export function ensureMarkdownExtension(name: string): string {
-  if (/\.(md|markdown|mdown|txt)$/i.test(name)) return name
-  return `${name}.md`
+/** 文件名对应的 Markdown 扩展名（不带点）；库里只索引 .md，Finder 打开的 .markdown / .txt 保持原样 */
+export function markdownExtensionOf(fileName: string): string {
+  const match = /\.(md|markdown|mdown|txt)$/i.exec(fileName)
+  return match ? match[1]! : 'md'
+}
+
+/**
+ * 保证扩展名：沿用当前文件的扩展名（默认 .md）。
+ * 名字里自带的 .txt / .markdown 只算文件名的一部分（`todo.txt` → `todo.txt.md`），
+ * 否则改完名就不再是 .md，文档会从侧栏和 Quick Open 里消失
+ */
+export function ensureMarkdownExtension(name: string, extension = 'md'): string {
+  if (!name) return name
+  if (name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) return name
+  return `${name}.${extension}`
 }
 
 /**

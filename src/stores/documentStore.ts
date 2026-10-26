@@ -21,7 +21,7 @@ import type {
   WriteResult,
 } from '@/lib/types'
 import { displayNameOf, followsFirstLine, nameFromFirstLine, sameName } from '@/lib/title'
-import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
+import { ensureMarkdownExtension, markdownExtensionOf, sanitizeFileName } from '@/lib/naming'
 import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from './editorStore'
 import { useSettingsStore } from './settingsStore'
@@ -345,7 +345,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   renameDocument: async (path: string, newName: string, options?: { auto?: boolean }) => {
-    const safeName = ensureMarkdownExtension(sanitizeFileName(newName))
+    const safeName = ensureMarkdownExtension(
+      sanitizeFileName(newName),
+      markdownExtensionOf(path.split('/').pop() ?? path),
+    )
     if (!safeName) return
     // 手动改名：这篇不再跟着第一行自动命名
     if (!options?.auto && autoNamedPath === path) autoNamedPath = null
