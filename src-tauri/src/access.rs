@@ -26,6 +26,21 @@ pub struct Access {
     export_targets: HashSet<PathBuf>,
 }
 
+/// 编辑器能内联显示的图片格式
+const IMAGE_EXTENSIONS: [&str; 9] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "heic",
+];
+
+fn is_image_file(path: &Path) -> bool {
+    path.extension()
+        .map(|ext| {
+            IMAGE_EXTENSIONS
+                .iter()
+                .any(|known| ext.eq_ignore_ascii_case(known))
+        })
+        .unwrap_or(false)
+}
+
 fn denied(path: &Path) -> CommandError {
     CommandError::new("accessDenied", path.display().to_string())
 }
@@ -97,6 +112,24 @@ impl Access {
             return Err(denied(path));
         }
         if self.in_library(&normalized) || self.opened_files.contains(&normalized) {
+            Ok(())
+        } else {
+            Err(denied(path))
+        }
+    }
+
+    /// 编辑器内联显示的图片：只放行图片扩展名，位置在库内，或某篇已打开的库外文档所在目录之下
+    /// （仓库里的 README 常写 `images/x.png`、`../docs/a.png` 之外的同级子目录）
+    pub fn check_image(&self, path: &Path) -> Result<(), CommandError> {
+        let normalized = normalize(path)?;
+        if !is_image_file(&normalized) || !normalized.is_file() {
+            return Err(denied(path));
+        }
+        let beside_opened = self
+            .opened_files
+            .iter()
+            .any(|file| file.parent().is_some_and(|dir| normalized.starts_with(dir)));
+        if self.in_library(&normalized) || beside_opened {
             Ok(())
         } else {
             Err(denied(path))
@@ -183,6 +216,33 @@ mod tests {
         assert!(access.check_document(&library.join("new.md")).is_ok());
         assert!(access.check_document_dir(&library).is_ok());
         assert!(access.check_library_root(&library).is_ok());
+    }
+
+    #[test]
+    fn images_only_inside_library_or_beside_opened_documents() {
+        let (mut access, library, outside) = library_access("images");
+        fs::create_dir_all(library.join("assets")).unwrap();
+        fs::write(library.join("assets/a.png"), "x").unwrap();
+        fs::write(library.join("notes.md"), "x").unwrap();
+        fs::create_dir_all(outside.join("repo/images")).unwrap();
+        fs::write(outside.join("repo/README.md"), "x").unwrap();
+        fs::write(outside.join("repo/images/b.png"), "x").unwrap();
+        fs::write(outside.join("c.png"), "x").unwrap();
+
+        assert!(access.check_image(&library.join("assets/a.png")).is_ok());
+        // 不是图片：哪怕在库里也不给
+        assert!(access.check_image(&library.join("notes.md")).is_err());
+        assert!(access
+            .check_image(&outside.join("repo/images/b.png"))
+            .is_err());
+
+        access
+            .grant_opened_file(&outside.join("repo/README.md"))
+            .unwrap();
+        assert!(access
+            .check_image(&outside.join("repo/images/b.png"))
+            .is_ok());
+        assert!(access.check_image(&outside.join("c.png")).is_err());
     }
 
     #[test]

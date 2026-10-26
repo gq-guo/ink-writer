@@ -98,6 +98,20 @@ export const inkThemeSpec = {
   '.cm-md-url': {
     color: 'var(--secondary)',
   },
+  // 图片内联预览：跟正文同宽，过高的图截住高度，不让一张长截图占满一屏
+  '.cm-ink-image': {
+    padding: '6px 0 14px',
+  },
+  '.cm-ink-image img': {
+    display: 'block',
+    maxWidth: '100%',
+    maxHeight: '420px',
+    borderRadius: '3px',
+  },
+  '.cm-ink-image.is-missing': {
+    color: 'var(--secondary)',
+    fontSize: '0.8em',
+  },
   '.cm-md-link-text': {
     color: 'var(--foreground)',
     textDecoration: 'underline',
