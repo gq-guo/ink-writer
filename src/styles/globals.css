@@ -5,6 +5,10 @@
    - iA Writer Quattro：拉丁 + 常用符号（CJK 仍回落系统字体，这是设计预期 ——
      中西文混排时拉丁用 Quattro、中文用苹方）
    - JetBrains Mono：代码字体
+   - Noto Serif SC + Ink Serif Text（Source Serif 4 改名）：中英宋体组合
+   - 霞鹜文楷：中英一体的楷体
+   中文字体只保留《通用规范汉字表》8105 字 + 标点（scripts/subset-fonts.py），
+   表外生僻字回落到栈里的系统字体。许可证见 src/fonts/licenses/。
    之前的问题：栈里引用了字体名但系统未安装，拉丁/中文/代码分别回退到
    三种不同字体，看起来像「同时激活了三个字体」。
    ========================================================================== */
@@ -58,6 +62,65 @@
   font-style: normal;
   font-display: swap;
 }
+/* Source Serif 4 的拉丁子集。OFL 保留名「Source」：修改版（子集化）不得沿用原名，故改名 */
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Serif Text';
+  src: url('../fonts/ink-serif-text-BoldItalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+/* 独立的 family 名，避免和用户自己装的完整版 Noto Serif SC 混用 */
+@font-face {
+  font-family: 'Ink Noto Serif SC';
+  src: url('../fonts/noto-serif-sc-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink Noto Serif SC';
+  src: url('../fonts/noto-serif-sc-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ink LXGW WenKai';
+  src: url('../fonts/lxgw-wenkai-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+/* 文楷没有 Bold：Medium 覆盖 500–900，粗体和标题直接用它，不让 WebKit 再合成假粗体 */
+@font-face {
+  font-family: 'Ink LXGW WenKai';
+  src: url('../fonts/lxgw-wenkai-Medium.woff2') format('woff2');
+  font-weight: 500 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 
 /* ==========================================================================
@@ -72,9 +135,13 @@
   --sidebar: #f2f1ec;
   --foreground: #292824;
   --secondary: #929087;
+  /* 侧栏未选中的导航文字：--secondary 在侧栏底色上只有 2.8:1，这里加深到约 5:1（WCAG AA） */
+  --sidebar-muted: #68665f;
   --border: #dedcd5;
   --accent: #6e756d;
-  --selection: #e8e5dd;
+  /* 朱砂：全应用唯一的彩色，只给光标和选区 —— 写字时看到的「墨」 */
+  --caret: #c23b22;
+  --selection: #f0d7d0;
   --highlight: #ece3c3;
   --highlight-strong: #e0d08f;
   --surface: #fcfbf8;
@@ -143,9 +210,12 @@
   --sidebar: #171614;
   --foreground: #e7e4dc;
   --secondary: #8e8b82;
+  /* 深色下 --secondary 已有 5.3:1，保持原样 */
+  --sidebar-muted: var(--secondary);
   --border: #2f2d29;
   --accent: #a3aa9f;
-  --selection: #3a3833;
+  --caret: #e5674e;
+  --selection: #58312a;
   --highlight: #4a4430;
   --highlight-strong: #6a5f3a;
   --surface: #23221f;
@@ -251,7 +321,7 @@ input {
   margin: 0 auto;
   /* ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%） */
   padding: 16px 24px calc(50vh + 32px) 24px;
-  caret-color: var(--accent);
+  caret-color: var(--caret);
   min-height: 100%;
 }
 
@@ -283,9 +353,12 @@ input {
   background: var(--selection);
 }
 
-.cm-cursor,
+.cm-cursor {
+  border-left: 2px solid var(--caret);
+}
+
 .cm-dropCursor {
-  border-left: 2px solid var(--foreground);
+  border-left: 2px solid var(--secondary);
 }
 
 /* 光标闪烁用 CM6 自带的（spec §17.4：系统默认，不自定义）：
@@ -640,7 +713,7 @@ html .cm-editor .cm-search.cm-panel button[name='close']:hover {
 }
 
 html .cm-editor .cm-content {
-  caret-color: var(--accent);
+  caret-color: var(--caret);
 }
 
 html .cm-editor .cm-searchMatch {
@@ -740,13 +813,17 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-doc-item {
-  /* 单行：图标 · 标题 · 收藏 · 右对齐时间。没有底色，当前文档只靠左侧一道细墨线 */
+  /* 单行：标题 · 收藏 · 右对齐时间。条目两侧内缩 10px，选中底色不贴边；
+     文字落在 22px，与分组标题、Documents 共用一条左边缘 */
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 20px 6px 38px;
+  margin: 0 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: default;
+  transition: background-color 120ms ease;
 }
 
 .ink-doc-title {
@@ -769,16 +846,15 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-weight: 500;
 }
 
-/* 当前项的墨线（文档列表与 All / Recent / Favorites 共用） */
-.ink-doc-item[data-active='true']::before,
-.ink-nav-item[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: 28px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--foreground);
+/* 当前项：很淡的墨色底（文档列表与 All / Recent / Favorites 共用），悬停再淡一半 */
+.ink-doc-item:hover,
+.ink-nav-item:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, transparent);
+}
+
+.ink-doc-item[data-active='true'],
+.ink-nav-item[data-active='true'] {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
 .ink-doc-time {
@@ -789,13 +865,10 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-group-label {
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--secondary);
-  /* 与 Documents 的图标左对齐 */
-  padding: 20px 20px 6px 24px;
-  text-transform: uppercase;
+  /* 只是时间刻度，不做全大写加字距的标题：小号、常规字重、比次要文字再淡一档 */
+  font-size: 12px;
+  color: color-mix(in srgb, var(--secondary) 70%, var(--sidebar));
+  padding: 18px 22px 4px;
 }
 
 .ink-status-row {
@@ -873,12 +946,6 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ink-qo-icon {
-  width: 13px;
-  height: 13px;
-  color: var(--secondary);
 }
 
 .ink-overlay-item[data-selected='true'] {
@@ -1373,7 +1440,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 20px 18px 24px;
+  padding: 8px 22px 18px;
 }
 
 /* 墨色羽毛，不做彩色 logo */
@@ -1403,16 +1470,11 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 20px 6px 24px;
+  padding: 6px 22px;
   font-size: 15px;
   font-weight: 500;
   color: var(--foreground);
   text-align: left;
-}
-
-.ink-nav-section .ink-icon-file {
-  width: 15px;
-  height: 15px;
 }
 
 /* 折叠提示：放在右侧、很淡，鼠标移上来才明显 */
@@ -1441,12 +1503,16 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 6px 20px 6px 38px;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 14.5px;
-  color: var(--secondary);
+  color: var(--sidebar-muted);
   text-align: left;
-  transition: color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .ink-nav-item:hover {
@@ -1458,16 +1524,14 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   font-weight: 500;
 }
 
-.ink-nav-item .ink-icon,
-.ink-doc-icon {
+.ink-nav-item .ink-icon {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--secondary);
 }
 
-.ink-nav-item[data-active='true'] .ink-icon,
-.ink-doc-item[data-active='true'] .ink-doc-icon {
+.ink-nav-item[data-active='true'] .ink-icon {
   color: var(--foreground);
 }
 
@@ -1480,7 +1544,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-sidebar-foot {
-  padding: 8px 12px 10px;
+  padding: 8px 10px 10px;
   border-top: 1px solid var(--border);
 }
 

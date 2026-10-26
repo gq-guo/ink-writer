@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: '#6E756D',
   fontFamily: 'serif',
   fontSize: 18,
-  lineHeight: 1.85,
+  lineHeight: 1.75,
   contentWidth: 680,
   libraryPath: '',
   typewriterMode: false,
@@ -30,6 +30,10 @@ export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
   plex: `"IBM Plex Sans", -apple-system, "PingFang SC", sans-serif`,
   // ui-serif = macOS 的 New York：正文有文学气质，界面仍用系统无衬线
   serif: `ui-serif, "New York", Georgia, "Songti SC", serif`,
+  // 内置：拉丁用 Ink Serif Text（Source Serif 4，有真斜体），中文用 Noto Serif SC；表外生僻字回落宋体
+  noto: `"Ink Serif Text", "Ink Noto Serif SC", "Songti SC", serif`,
+  // 内置：霞鹜文楷自带拉丁字形，中英同一种手写气质；表外生僻字回落系统楷体
+  wenkai: `"Ink LXGW WenKai", "Kaiti SC", "STKaiti", serif`,
   mono: `"JetBrains Mono", "PingFang SC", monospace`,
 }
 

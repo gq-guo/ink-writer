@@ -34,7 +34,7 @@ export const inkThemeSpec = {
     margin: '0 auto',
     // ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%）
     padding: '16px 24px calc(50vh + 32px) 24px',
-    caretColor: 'var(--foreground)',
+    caretColor: 'var(--caret)',
   },
   '.cm-scroller': {
     overflowX: 'hidden',
@@ -44,11 +44,15 @@ export const inkThemeSpec = {
   '.cm-line': {
     padding: '0',
   },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'var(--selection)',
-  },
+  // 聚焦时 CM6 base theme 用 `&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`
+  // 画选区（默认淡紫 #d7d4f0），权重比上面一条高；不写同样的选择器，聚焦时的选区就一直是 CM 的默认色
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground':
+    {
+      backgroundColor: 'var(--selection)',
+    },
+  // 光标是朱砂色（--caret），和选区一起构成全应用唯一的彩色
   '.cm-cursor': {
-    borderLeftColor: 'var(--foreground)',
+    borderLeftColor: 'var(--caret)',
     borderLeftWidth: '2px',
   },
   '.cm-dropCursor': {
@@ -78,6 +82,12 @@ export const inkThemeSpec = {
   // 标记一律弱化成灰色：连同语法高亮在标记上加的颜色（任务框、表头竖线、HTML 标签）一起压掉
   '.cm-md-mark, .cm-md-mark *': {
     color: 'var(--secondary)',
+  },
+  // 外悬标记的定宽盒（宽度由 styledSource 按字符数给出）；text-indent 不能继承进来，否则盒内再缩一次
+  '.cm-md-hang': {
+    display: 'inline-block',
+    textIndent: '0',
+    whiteSpace: 'pre',
   },
   '.cm-md-list-lead': {
     letterSpacing: '0.35em',
@@ -113,8 +123,9 @@ export const inkThemeSpec = {
     padding: '0.15em 0.4em',
   },
   // 段间距：加在段落后的分隔空行上（没有空行时加在段落最后一行），见 styledSource 的 Paragraph
+  // 分隔空行本身已经占了一整行，这里只补一点：段与段之间约 1.2 行，而不是接近两行
   '.cm-md-para': {
-    paddingBottom: '0.5em',
+    paddingBottom: '0.3em',
   },
   // 18px 正文下：H1 32px / H2 21px，都是 600；标题前的留白明显大于标题后
   '.cm-md-h1': {
@@ -136,19 +147,25 @@ export const inkThemeSpec = {
     lineHeight: '1.45',
     paddingTop: '1em',
   },
+  // H4 及以下不再放大，靠字号逐级收小 + 颜色变淡区分，前面都留出和 H3 相近的空白
   '.cm-md-h4': {
     fontSize: '1em',
     fontWeight: '600',
+    paddingTop: '0.8em',
   },
   '.cm-md-h5': {
-    fontSize: '1em',
+    fontSize: '0.92em',
     fontWeight: '600',
-    color: 'color-mix(in srgb, var(--foreground) 85%, var(--secondary))',
+    letterSpacing: '0.01em',
+    color: 'color-mix(in srgb, var(--foreground) 82%, var(--secondary))',
+    paddingTop: '0.8em',
   },
   '.cm-md-h6': {
-    fontSize: '1em',
+    fontSize: '0.85em',
     fontWeight: '600',
-    color: 'color-mix(in srgb, var(--foreground) 70%, var(--secondary))',
+    letterSpacing: '0.02em',
+    color: 'color-mix(in srgb, var(--foreground) 65%, var(--secondary))',
+    paddingTop: '0.8em',
   },
   '.cm-md-quote': {
     borderLeft: '2px solid var(--border)',
