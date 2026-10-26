@@ -117,3 +117,45 @@ describe('主题切换', () => {
     }
   })
 })
+
+describe('settingsStore.hydrate 的默认字体（跟随系统语言）', () => {
+  const originalLanguage = navigator.language
+
+  beforeEach(() => {
+    invokeMock.mockReset()
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+  })
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    Object.defineProperty(navigator, 'language', { value: originalLanguage, configurable: true })
+  })
+
+  async function hydrateWith(stored: Record<string, unknown>, systemLanguage: string) {
+    Object.defineProperty(navigator, 'language', { value: systemLanguage, configurable: true })
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_library') return { path: '/lib', exists: true }
+      if (command === 'load_persisted' && args?.key === 'settings') return stored
+      return null
+    })
+    const { settingsStore } = await loadStores()
+    await settingsStore.getState().hydrate()
+    return settingsStore.getState().settings.fontFamily
+  }
+
+  it('新装、系统是中文：默认用内置的 Noto 宋体', async () => {
+    expect(await hydrateWith({}, 'zh-CN')).toBe('noto')
+  })
+
+  it('新装、系统是英文：默认用系统衬线体', async () => {
+    expect(await hydrateWith({}, 'en-US')).toBe('serif')
+  })
+
+  it('界面语言手动设成中文时，按设置而不是系统语言', async () => {
+    expect(await hydrateWith({ locale: 'zh-CN' }, 'en-US')).toBe('noto')
+  })
+
+  it('已经选过字体的用户不受影响', async () => {
+    expect(await hydrateWith({ fontFamily: 'serif' }, 'zh-CN')).toBe('serif')
+  })
+})

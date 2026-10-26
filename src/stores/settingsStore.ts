@@ -6,7 +6,7 @@
 import { create } from 'zustand'
 import type { AppSettings } from '@/lib/types'
 import { loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
-import { syncLocale, t } from '@/lib/i18n'
+import { resolveLocale, syncLocale, t, type Locale } from '@/lib/i18n'
 import { useUiStore } from './uiStore'
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -38,6 +38,15 @@ export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
 }
 
 export const FONT_SIZE_RANGE = { min: 14, max: 24 } as const
+
+/**
+ * 没选过字体（新装）时的默认写作字体，跟着界面语言走：
+ * 中文用内置的 Noto 宋体（中英字重匹配、不依赖系统装了什么宋体），其他语言用系统衬线体 New York。
+ * 已经存过字体的用户不受影响。
+ */
+export function defaultFontFamily(locale: Locale): AppSettings['fontFamily'] {
+  return locale === 'zh-CN' ? 'noto' : 'serif'
+}
 
 interface SettingsState {
   settings: AppSettings
@@ -107,6 +116,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hydrate: async () => {
     const stored = await readPersisted<Partial<AppSettings>>('settings', {})
+    if (stored.fontFamily === undefined) {
+      stored.fontFamily = defaultFontFamily(resolveLocale(stored.locale ?? DEFAULT_SETTINGS.locale))
+    }
     // 文档库只认 Rust 侧授权的路径；settings.libraryPath 仅作展示用的副本
     const library = await loadAuthorizedLibrary()
     const merged: AppSettings = {
