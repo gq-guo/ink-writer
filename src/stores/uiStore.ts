@@ -9,6 +9,8 @@ let toastId = 0
 export type SidebarView = 'all' | 'recent' | 'favorites'
 
 interface UiState {
+  /** 存下的 UI 快照已读回（侧栏显隐等）：读回之前不渲染主界面，否则侧栏会从默认的收起状态动画展开 */
+  hydrated: boolean
   sidebarVisible: boolean
   sidebarWidth: number
   sidebarView: SidebarView
@@ -57,6 +59,7 @@ export const SIDEBAR_WIDTH_RANGE = { min: 200, max: 320 } as const
 export const RECENT_COMMANDS_LIMIT = 5
 
 export const useUiStore = create<UiState>((set, get) => ({
+  hydrated: false,
   sidebarVisible: false,
   sidebarWidth: 240,
   sidebarView: 'all',
@@ -107,6 +110,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   hydrate: (snapshot) =>
     set({
+      hydrated: true,
       sidebarVisible: snapshot.sidebarVisible ?? get().sidebarVisible,
       sidebarWidth: Math.min(
         SIDEBAR_WIDTH_RANGE.max,

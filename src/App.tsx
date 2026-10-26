@@ -36,6 +36,7 @@ import { useUiStore, type UiSnapshot } from '@/stores/uiStore'
 
 export default function App() {
   const hydrated = useSettingsStore((state) => state.hydrated)
+  const uiHydrated = useUiStore((state) => state.hydrated)
   const libraryPath = useSettingsStore((state) => state.settings.libraryPath)
   const focusMode = useEditorStore((state) => state.focusMode)
   const typing = useEditorStore((state) => state.typing)
@@ -212,7 +213,8 @@ export default function App() {
     }
   }, [])
 
-  if (!hydrated) return null
+  // UI 快照也要读回再渲染：侧栏显隐是存下来的，先按默认（收起）渲染再展开，刷新时就会看到侧栏动画展开一下
+  if (!hydrated || !uiHydrated) return null
 
   if (!libraryPath) {
     return (

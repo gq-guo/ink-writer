@@ -356,6 +356,23 @@ describe('刷新 / 重启后回到上次打开的文档', () => {
     await waitFor(() => expect(useDocumentStore.getState().activeDocument?.path).toBe(`${library}/中台测试.md`))
   })
 
+  it('侧栏按存下的状态直接出现，不会先收起再动画展开', async () => {
+    window.localStorage.setItem('ink:ui', JSON.stringify({ sidebarVisible: true }))
+    useUiStore.setState({ hydrated: false, sidebarVisible: false })
+    const seen: (string | null)[] = []
+    const observer = new MutationObserver(() => {
+      const sidebar = document.querySelector('.ink-sidebar')
+      if (sidebar) seen.push(sidebar.getAttribute('data-hidden'))
+    })
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-hidden'] })
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ink-sidebar')).toBeTruthy())
+    await waitFor(() => expect(useDocumentStore.getState().activeDocument).not.toBeNull())
+    observer.disconnect()
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen).not.toContain('true')
+  })
+
   it('没有记录时仍打开第一篇，并把它记下来', async () => {
     render(<App />)
     await waitFor(() => expect(useDocumentStore.getState().activeDocument?.path).toBe(`${library}/get.md`))
