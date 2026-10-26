@@ -9,6 +9,7 @@ mod encoding;
 mod fs_ops;
 mod open_requests;
 mod search;
+mod tags;
 mod watcher;
 mod window_theme;
 
@@ -377,6 +378,7 @@ fn copy_image_bytes(
     fs_ops::copy_image_bytes(&doc_dir, &file_name, &bytes)
 }
 
+/// 扫描全库：标成 async，在后台线程跑，不卡主线程（同步命令在主线程执行）
 #[tauri::command(async)]
 fn search_content(
     state: State<'_, AccessState>,
@@ -386,6 +388,27 @@ fn search_content(
     let root = to_path(&root);
     lock(&state).check_library_root(&root)?;
     search::search_content(&root, &query)
+}
+
+#[tauri::command(async)]
+fn search_tags(
+    state: State<'_, AccessState>,
+    root: String,
+    query: String,
+) -> Result<Vec<tags::TagHit>, CommandError> {
+    let root = to_path(&root);
+    lock(&state).check_library_root(&root)?;
+    tags::search_tags(&root, &query)
+}
+
+#[tauri::command(async)]
+fn list_tags(
+    state: State<'_, AccessState>,
+    root: String,
+) -> Result<Vec<tags::TagCount>, CommandError> {
+    let root = to_path(&root);
+    lock(&state).check_library_root(&root)?;
+    tags::list_tags(&root)
 }
 
 /// 写出导出文件：只能写到导出对话框选定的目标
@@ -601,6 +624,8 @@ pub fn run() {
             delete_document,
             copy_image_bytes,
             search_content,
+            search_tags,
+            list_tags,
             write_text_file,
             write_new_text_file,
             copy_assets,

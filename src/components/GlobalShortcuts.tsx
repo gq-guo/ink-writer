@@ -8,7 +8,7 @@
 import { useEffect } from 'react'
 
 import { buildCommands } from '@/commands/registry'
-import { dispatchCommand } from '@/commands/dispatch'
+import { dispatchCommand, isTypingOutsideEditor } from '@/commands/dispatch'
 import { shortcutOf } from '@/lib/keys'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -21,6 +21,7 @@ const SHORTCUT_COMMANDS: Record<string, string> = {
   'mod+p': 'doc.quickOpen',
   'mod+k': 'app.palette',
   'mod+f': 'editor.find',
+  'mod+l': 'editor.toggleTask',
   'alt+\\': 'app.sidebar',
   'mod+shift+f': 'mode.focus',
   'mod+shift+t': 'mode.typewriter',
@@ -60,6 +61,16 @@ export function GlobalShortcuts() {
       const command = buildCommands().find((item) => item.id === commandId)
       if (!command) return
       if (command.when && !command.when()) return
+      if (command.editorScoped) {
+        // macOS 上 Ctrl+L 是 CodeMirror 的「选中整行」，编辑命令只认 ⌘
+        if (!event.metaKey) return
+        // 别的输入框里的按键留给输入框；按住不放时不连发（任务框会来回闪）
+        if (isTypingOutsideEditor(event.target)) return
+        if (event.repeat) {
+          event.preventDefault()
+          return
+        }
+      }
 
       event.preventDefault()
       dispatchCommand(commandId, 'keyboard')

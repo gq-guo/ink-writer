@@ -130,6 +130,8 @@ async function buildAndInstall(): Promise<void> {
       native('SelectAll', t('mb.selectAll')),
       separator(),
       command('editor.find', t('mb.find'), 'CmdOrCtrl+F'),
+      // 不挂快捷键：菜单的快捷键按住会连发、焦点在改名框里也会触发，⌘L 只走 GlobalShortcuts
+      command('editor.toggleTask', t('mb.toggleTask')),
     ],
   })
 

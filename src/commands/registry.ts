@@ -10,7 +10,7 @@ import { editorBridge } from '@/editor/bridge'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useUiStore } from '@/stores/uiStore'
+import { newDocumentFolder, useUiStore } from '@/stores/uiStore'
 import { t } from '@/lib/i18n'
 import { errorMessage } from '@/lib/errors'
 
@@ -28,6 +28,11 @@ export interface Command {
   when?: () => boolean
   /** 只给快捷键 / 菜单栏用、不在 Palette 里列出（与 when 不同：不影响执行） */
   hideInPalette?: boolean
+  /**
+   * 改正文的编辑命令：从快捷键 / 菜单栏触发时，焦点在编辑器以外的输入框（顶栏改名、搜索框…）就不执行，
+   * 按住快捷键也不连发
+   */
+  editorScoped?: boolean
 }
 
 export function buildCommands(): Command[] {
@@ -37,7 +42,7 @@ export function buildCommands(): Command[] {
       id: 'doc.new',
       title: t('cmd.doc.new'),
       shortcut: '⌘N',
-      run: () => useDocumentStore.getState().createDocument(),
+      run: () => useDocumentStore.getState().createDocument(newDocumentFolder()),
     },
     {
       group: 'file',
@@ -67,6 +72,15 @@ export function buildCommands(): Command[] {
       title: t('cmd.editor.find'),
       shortcut: '⌘F',
       run: () => editorBridge.openFind?.(),
+    },
+    {
+      group: 'edit',
+      id: 'editor.toggleTask',
+      title: t('cmd.editor.toggleTask'),
+      shortcut: '⌘L',
+      run: () => editorBridge.toggleTask(),
+      when: () => useDocumentStore.getState().activeDocument !== null,
+      editorScoped: true,
     },
     {
       group: 'view',

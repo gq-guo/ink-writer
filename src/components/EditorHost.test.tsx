@@ -6,6 +6,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue(undef
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 
 import { EditorHost } from '@/components/EditorHost'
+import { GlobalShortcuts } from '@/components/GlobalShortcuts'
 import { syncLocale } from '@/lib/i18n'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
@@ -102,5 +103,45 @@ describe('EditorHost 文档头', () => {
     act(() => useEditorStore.setState({ focusMode: true }))
     await waitFor(() => expect(container.querySelector('.ink-doc-header')).toBeNull())
     act(() => useEditorStore.setState({ focusMode: false }))
+  })
+})
+
+describe('EditorHost 切换任务', () => {
+  it('⌘L 经命令与编辑器桥接切换光标所在行', async () => {
+    render(<GlobalShortcuts />)
+    const { view } = await mountEditor()
+    act(() => view.dispatch({ selection: { anchor: 2 } }))
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true }))
+    })
+    expect(view.state.doc.toString()).toBe('- [ ] hello')
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true }))
+    })
+    expect(view.state.doc.toString()).toBe('- [x] hello')
+  })
+
+  it('焦点在别的输入框、Ctrl+L、按住连发：都不改正文', async () => {
+    render(<GlobalShortcuts />)
+    const { view } = await mountEditor()
+    act(() => view.dispatch({ selection: { anchor: 2 } }))
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+    })
+    expect(view.state.doc.toString()).toBe('hello')
+    expect(document.activeElement).toBe(input)
+    input.remove()
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, repeat: true }))
+    })
+    expect(view.state.doc.toString()).toBe('hello')
   })
 })

@@ -144,6 +144,24 @@ mod tests {
     }
 
     #[test]
+    fn crlf_lines_count_as_one_newline() {
+        let root = std::env::temp_dir().join(format!("ink-search-crlf-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        // CRLF 与中文 / emoji：编辑器里换行是一个字符，😀 占两个 UTF-16 单元
+        let text = "第一行\r\n😀 中文 Ink 写作\r\n";
+        fs::write(root.join("a.md"), text).unwrap();
+
+        let hits = search_content(&root, "写作").unwrap();
+        assert_eq!(hits.len(), 1);
+        let editor_text: Vec<u16> = text.replace("\r\n", "\n").encode_utf16().collect();
+        let found = String::from_utf16(&editor_text[hits[0].start..hits[0].end]).unwrap();
+        assert_eq!(found, "写作");
+        assert_eq!(hits[0].line, 2);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn offsets_are_utf16_code_units() {
         let dir = std::env::temp_dir().join(format!("ink-search-utf16-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);

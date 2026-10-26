@@ -13,6 +13,8 @@ export interface EditorBridge {
   openFind?: () => void
   /** 跳到某个位置：光标放到该行末，该行滚到视口上部（目录跳转用） */
   jumpTo?: (pos: number) => void
+  /** 切换选区所在行的任务框（⌘L） */
+  toggleTask?: () => void
 }
 
 let bridge: EditorBridge | null = null
@@ -32,5 +34,6 @@ export const editorBridge = {
   focus: () => bridge?.focus(),
   openFind: () => bridge?.openFind?.(),
   jumpTo: (pos: number) => bridge?.jumpTo?.(pos),
+  toggleTask: () => bridge?.toggleTask?.(),
   isReady: () => bridge !== null,
 }

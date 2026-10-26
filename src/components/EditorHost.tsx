@@ -22,6 +22,7 @@ import { inkSyntaxHighlighting } from '@/editor/highlight'
 import { setTypewriterModeEffect } from '@/editor/typewriter'
 import { centerCursorEffect } from '@/editor/centering'
 import { setDocHeaderEffect, type DocHeaderInfo } from '@/editor/docHeader'
+import { toggleTask } from '@/editor/tasks'
 import { formatMetaTime } from '@/lib/format'
 import { registerEditorBridge } from '@/editor/bridge'
 import { errorMessage } from '@/lib/errors'
@@ -123,6 +124,7 @@ export function EditorHost() {
           useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
         })
       },
+      onOpenTag: (tag) => useUiStore.getState().showQuickOpen(`#${tag}`),
       onError: (message) => {
         useUiStore.getState().pushToast({ message, kind: 'error' })
       },
@@ -176,6 +178,10 @@ export function EditorHost() {
       getContent: () => textRef.current,
       focus: () => view.focus(),
       openFind: () => openSearchPanel(view),
+      toggleTask: () => {
+        toggleTask(view)
+        view.focus()
+      },
       jumpTo: (pos) => {
         const line = view.state.doc.lineAt(Math.min(Math.max(pos, 0), view.state.doc.length))
         view.dispatch({

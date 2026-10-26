@@ -60,7 +60,8 @@ interface DocumentState {
   /** 更换文档库位置：Rust 弹出目录选择框，复制现有文档（不删旧库）后切换过去 */
   changeLibrary: () => Promise<void>
   refreshDocuments: () => Promise<void>
-  createDocument: () => Promise<void>
+  /** dirPrefix：相对库根目录的文件夹（如 "Project/"），默认库根目录 */
+  createDocument: (dirPrefix?: string) => Promise<void>
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
   onEditorChange: (text: string) => void
   flushSave: () => Promise<void>
@@ -215,13 +216,15 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   /**
    * 新建文档：立即创建文件并打开（R10）
    */
-  createDocument: async () => {
+  createDocument: async (dirPrefix = '') => {
     const { libraryPath } = get()
     if (!libraryPath) return
     if (!(await get().prepareToLeave())) return
+    // dirPrefix 来自 list_documents 的结果；Rust 端仍会校验目录在库内
+    const folder = dirPrefix.replace(/\/+$/, '')
     try {
       const meta = await invoke<DocumentMeta>('create_document', {
-        dir: libraryPath,
+        dir: folder ? `${libraryPath}/${folder}` : libraryPath,
         baseName: 'Untitled',
       })
       await get().refreshDocuments()
