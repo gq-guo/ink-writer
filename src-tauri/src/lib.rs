@@ -368,7 +368,8 @@ fn copy_image_bytes(
     fs_ops::copy_image_bytes(&doc_dir, &file_name, &bytes)
 }
 
-#[tauri::command]
+/// 扫描全库：标成 async，在后台线程跑，不卡主线程（同步命令在主线程执行）
+#[tauri::command(async)]
 fn search_content(
     state: State<'_, AccessState>,
     root: String,
@@ -379,7 +380,7 @@ fn search_content(
     search::search_content(&root, &query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn search_tags(
     state: State<'_, AccessState>,
     root: String,
@@ -390,7 +391,7 @@ fn search_tags(
     tags::search_tags(&root, &query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_tags(
     state: State<'_, AccessState>,
     root: String,

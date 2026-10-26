@@ -14,8 +14,11 @@ import { EditorSelection, type ChangeSpec, type EditorState, type TransactionSpe
 import { EditorView, WidgetType } from '@codemirror/view'
 import type { SyntaxNode, Tree } from '@lezer/common'
 
-/** 改动不算「输入」：不触发打字居中、临时空行等只针对打字的行为 */
-const USER_EVENT = 'toggle.task'
+/**
+ * 改动不算「输入」：不触发打字居中、临时空行等只针对打字的行为；
+ * 也不算「用户动过光标」（styledSource 的 cursorEngagedField），点复选框不会让光标所在行露出标记
+ */
+export const TASK_TOGGLE_EVENT = 'toggle.task'
 
 /** ⌘L 前补全语法树最多等这么久（大文档里光标附近之外可能还没解析） */
 const PARSE_TIMEOUT_MS = 200
@@ -111,7 +114,8 @@ function flipMarker(state: EditorState, from: number): ChangeSpec {
 function targetLine(state: EditorState, tree: Tree, lineNumber: number): number {
   const line = state.doc.line(lineNumber)
   const restFrom = line.from + QUOTE_PREFIX.exec(line.text)![0].length
-  if (restFrom === line.to) return lineNumber
+  // 列表项里的代码块等：行本身不切换（toggleLineChange 会跳过），也不去勾所属的列表项
+  if (restFrom === line.to || insideSkippedBlock(tree, restFrom)) return lineNumber
   const item = ancestor(tree.resolveInner(restFrom, 1), 'ListItem')
   return item ? state.doc.lineAt(item.from).number : lineNumber
 }
@@ -158,7 +162,10 @@ export function toggleTaskSpec(state: EditorState): TransactionSpec | null {
   }
 
   // 没解析到的地方会把任务误认成普通行（再套一层任务框），解析不完就不动
-  const lastLine = state.doc.line(Math.max(...selected))
+  // 不用 Math.max(...selected)：全选十几万行时展开参数会栈溢出
+  let maxLine = 1
+  for (const ln of selected) if (ln > maxLine) maxLine = ln
+  const lastLine = state.doc.line(maxLine)
   const tree = ensureSyntaxTree(state, lastLine.to, PARSE_TIMEOUT_MS)
   if (!tree) return null
 
@@ -179,7 +186,7 @@ export function toggleTaskSpec(state: EditorState): TransactionSpec | null {
     ),
     state.selection.mainIndex,
   )
-  return { changes: changeSet, selection, userEvent: USER_EVENT }
+  return { changes: changeSet, selection, userEvent: TASK_TOGGLE_EVENT }
 }
 
 /**
@@ -193,7 +200,7 @@ export function clickTaskSpec(state: EditorState, pos: number): TransactionSpec 
   if (!marker && tree.resolveInner(pos, -1).name === 'TaskMarker') marker = tree.resolveInner(pos, -1)
   if (!marker && node.name === 'ListMark' && node.parent) marker = taskMarkerOf(node.parent)
   if (!marker) return null
-  return { changes: flipMarker(state, marker.from), userEvent: USER_EVENT }
+  return { changes: flipMarker(state, marker.from), userEvent: TASK_TOGGLE_EVENT }
 }
 
 export function toggleTask(view: EditorView): boolean {
@@ -207,11 +214,12 @@ export function toggleTask(view: EditorView): boolean {
 export const inkTaskClickHandler = EditorView.domEventHandlers({
   mousedown(event, view) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false
-    // 控件取最外层元素：posAtDOM 对控件根元素给出它的起点
+    // 只有点在复选框本身（或「显示标记」时的 [ ]）上才切换；外悬盒里框右边的空白照常放光标
     const element = event.target instanceof Element ? event.target : null
-    const target =
-      element?.closest('.cm-md-checkbox-hang, .cm-md-checkbox-inline') ?? element?.closest('.cm-md-task-marker')
-    if (!target) return false
+    const box = element?.closest('.cm-md-checkbox') ?? element?.closest('.cm-md-task-marker')
+    if (!box) return false
+    // 控件取最外层元素：posAtDOM 对控件根元素给出它的起点
+    const target = box.closest('.cm-md-checkbox-hang, .cm-md-checkbox-inline') ?? box
     event.preventDefault()
     // 双击的第二下只吞掉（不再切回去，也不选中文字）
     if (event.detail > 1) return true

@@ -28,6 +28,8 @@ notify-debouncer-mini = "0.5"
 chardetng = "0.1"
 encoding_rs = "0.8"
 trash = "5"
+# 标签扫描时识别代码块 / 行内代码 / HTML（只用解析器，不要命令行与 HTML 输出）
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [profile.release]
 codegen-units = 1

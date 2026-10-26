@@ -315,8 +315,10 @@ export function Sidebar() {
               {t('sidebar.folders')}
               <span className="ink-icon ink-icon-chevron" data-open={foldersOpen} aria-hidden />
             </button>
-            {foldersOpen
-              ? folders.map((entry) => (
+            {foldersOpen ? (
+              // 文件夹多时自己滚动，不把下面的文档列表和「新建文档」挤出去
+              <div className="ink-folder-list">
+                {folders.map((entry) => (
                   <button
                     key={entry.prefix}
                     className="ink-nav-item"
@@ -329,8 +331,9 @@ export function Sidebar() {
                     <span className="truncate">{entry.name}</span>
                     <span className="ink-nav-count">{entry.count}</span>
                   </button>
-                ))
-              : null}
+                ))}
+              </div>
+            ) : null}
           </>
         ) : null}
       </nav>

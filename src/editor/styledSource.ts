@@ -26,7 +26,7 @@ import type { SyntaxNode } from '@lezer/common'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 
 import { tagRangesIn } from './tags'
-import { TaskCheckboxWidget, taskMarkerOf } from './tasks'
+import { TASK_TOGGLE_EVENT, TaskCheckboxWidget, taskMarkerOf } from './tasks'
 
 /** 可见区间外扩的行数（spec §18.2） */
 const PAD_LINES = 200
@@ -75,7 +75,12 @@ export const concealCompartment = new Compartment()
  */
 export const cursorEngagedField = StateField.define<boolean>({
   create: () => false,
-  update: (engaged, tr) => engaged || tr.annotation(Transaction.userEvent) !== undefined,
+  update: (engaged, tr) => {
+    if (engaged) return true
+    const userEvent = tr.annotation(Transaction.userEvent)
+    // 点复选框切换任务不算动过光标（光标没动）
+    return userEvent !== undefined && userEvent !== TASK_TOGGLE_EVENT
+  },
 })
 
 /** 选区覆盖的行（这些行显示全部标记） */

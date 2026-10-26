@@ -40,6 +40,21 @@ interface TagHitResult {
 
 type Result = FileResult | ContentResult | TagResult | TagHitResult
 
+/**
+ * 异步搜索的结果连同它对应的搜索词和第几次打开：只有和当前一致时才显示，
+ * 防止上一个词（防抖等待中）或上一次打开（文档已经改过）的结果被选中、跳到过时的位置
+ */
+interface Hits<T> {
+  query: string
+  openSeq: number
+  hits: T[]
+}
+
+/** 只取和当前搜索词、当前这次打开对应的结果 */
+function currentHits<T>(found: Hits<T>, query: string, openSeq: number): T[] {
+  return found.query === query && found.openSeq === openSeq ? found.hits : []
+}
+
 const MIN_CONTENT_QUERY = 2
 const CONTENT_TRIGGER_THRESHOLD = 5
 /** 标签模式下最多列出的标签数 */
@@ -62,9 +77,9 @@ export function QuickOpen() {
   const t = useT()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
-  const [contentHits, setContentHits] = useState<SearchHit[]>([])
+  const [contentHits, setContentHits] = useState<Hits<SearchHit>>({ query: '', openSeq: 0, hits: [] })
   const [allTags, setAllTags] = useState<TagCount[]>([])
-  const [tagHits, setTagHits] = useState<TagHit[]>([])
+  const [tagHits, setTagHits] = useState<Hits<TagHit>>({ query: '', openSeq: 0, hits: [] })
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const trimmed = query.trim()
@@ -72,9 +87,10 @@ export function QuickOpen() {
   const tagQuery = tagMode ? trimmed.slice(1).toLowerCase() : ''
 
   // ⌘Click 标签等带着搜索词打开：换成这个词；否则保留上次的输入（渲染时调整，见 React「根据 props 调整 state」）
-  const [opened, setOpened] = useState({ visible: false, query: '' })
+  const [opened, setOpened] = useState({ visible: false, query: '', seq: 0 })
   if (opened.visible !== visible || opened.query !== initialQuery) {
-    setOpened({ visible, query: initialQuery })
+    // 每次打开记一个序号：上一次打开时搜到的结果不再算数
+    setOpened({ visible, query: initialQuery, seq: visible && !opened.visible ? opened.seq + 1 : opened.seq })
     if (visible && initialQuery) {
       setQuery(initialQuery)
       setSelected(0)
@@ -102,30 +118,25 @@ export function QuickOpen() {
     }
   }, [visible, tagMode])
 
-  // 标签模式：带这个标签（前缀匹配）的段落
+  const openSeq = opened.seq
+
+  // 标签模式：带这个标签（前缀匹配）的段落；每次打开都重新搜（文档可能改过）
   useEffect(() => {
+    if (!visible || !tagQuery) return
     let cancelled = false
-    const timer = setTimeout(
-      () => {
-        if (!tagQuery) {
-          setTagHits([])
-          return
-        }
-        void invoke<TagHit[]>('search_tags', { root: useDocumentStore.getState().libraryPath, query: tagQuery })
-          .then((hits) => {
-            if (!cancelled) setTagHits(hits ?? [])
-          })
-          .catch(() => {
-            if (!cancelled) setTagHits([])
-          })
-      },
-      tagQuery ? 150 : 0,
-    )
+    const timer = setTimeout(() => {
+      const done = (hits: TagHit[]) => {
+        if (!cancelled) setTagHits({ query: tagQuery, openSeq, hits })
+      }
+      void invoke<TagHit[]>('search_tags', { root: useDocumentStore.getState().libraryPath, query: tagQuery })
+        .then((hits) => done(hits ?? []))
+        .catch(() => done([]))
+    }, 150)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [tagQuery])
+  }, [visible, tagQuery, openSeq])
 
   const fileResults = useMemo<FileResult[]>(() => {
     if (tagMode) return []
@@ -143,34 +154,26 @@ export function QuickOpen() {
   }, [documents, tagMode, trimmed])
 
   // 正文搜索：查询 ≥2 字符且文件名结果 <5 条（标签模式不搜正文）
+  const wantsContent = !tagMode && trimmed.length >= MIN_CONTENT_QUERY && fileResults.length < CONTENT_TRIGGER_THRESHOLD
   useEffect(() => {
+    if (!visible || !wantsContent) return
     let cancelled = false
-    if (tagMode || trimmed.length < MIN_CONTENT_QUERY || fileResults.length >= CONTENT_TRIGGER_THRESHOLD) {
-      const timer = setTimeout(() => {
-        if (!cancelled) setContentHits([])
-      }, 0)
-      return () => {
-        cancelled = true
-        clearTimeout(timer)
-      }
-    }
     const timer = setTimeout(() => {
+      const done = (hits: SearchHit[]) => {
+        if (!cancelled) setContentHits({ query: trimmed, openSeq, hits })
+      }
       void invoke<SearchHit[]>('search_content', {
         root: useDocumentStore.getState().libraryPath,
         query: trimmed,
       })
-        .then((hits) => {
-          if (!cancelled) setContentHits(hits)
-        })
-        .catch(() => {
-          if (!cancelled) setContentHits([])
-        })
+        .then((hits) => done(hits ?? []))
+        .catch(() => done([]))
     }, 150)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [tagMode, trimmed, fileResults.length])
+  }, [visible, wantsContent, trimmed, openSeq])
 
   const results = useMemo<Result[]>(() => {
     if (tagMode) {
@@ -178,10 +181,15 @@ export function QuickOpen() {
         .filter((tag) => tag.tag.toLowerCase().startsWith(tagQuery) && tag.tag.toLowerCase() !== tagQuery)
         .slice(0, TAG_LIST_LIMIT)
         .map((tag) => ({ kind: 'tag' as const, tag }))
-      return [...tags, ...tagHits.map((hit) => ({ kind: 'tagHit' as const, hit }))]
+      const hits = tagQuery ? currentHits(tagHits, tagQuery, openSeq) : []
+      return [...tags, ...hits.map((hit) => ({ kind: 'tagHit' as const, hit }))]
     }
-    return [...fileResults, ...contentHits.map((hit) => ({ kind: 'content' as const, hit }))]
-  }, [allTags, contentHits, fileResults, tagHits, tagMode, tagQuery])
+    const hits = wantsContent ? currentHits(contentHits, trimmed, openSeq) : []
+    return [...fileResults, ...hits.map((hit) => ({ kind: 'content' as const, hit }))]
+  }, [allTags, contentHits, fileResults, tagHits, tagMode, tagQuery, trimmed, wantsContent, openSeq])
+
+  /** 结果变少时选中项不越界 */
+  const activeIndex = results.length === 0 ? -1 : Math.min(Math.max(selected, 0), results.length - 1)
 
   if (!visible) return null
 
@@ -215,13 +223,13 @@ export function QuickOpen() {
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
             event.preventDefault()
-            setSelected((index) => Math.min(index + 1, results.length - 1))
+            setSelected(Math.min(activeIndex + 1, results.length - 1))
           } else if (event.key === 'ArrowUp') {
             event.preventDefault()
-            setSelected((index) => Math.max(index - 1, 0))
+            setSelected(Math.max(activeIndex - 1, 0))
           } else if (event.key === 'Enter') {
             event.preventDefault()
-            choose(results[selected])
+            choose(results[activeIndex])
           }
         }}
       />
@@ -237,7 +245,7 @@ export function QuickOpen() {
               {startsGroup ? <div className="ink-overlay-group">{t(groupKey)}</div> : null}
               <div
                 className="ink-overlay-item"
-                data-selected={index === selected}
+                data-selected={index === activeIndex}
                 onMouseEnter={() => setSelected(index)}
                 onClick={() => choose(item)}
               >

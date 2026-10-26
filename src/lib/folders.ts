@@ -21,6 +21,9 @@ function compareSegments(a: string[], b: string[]): number {
   for (let index = 0; index < Math.min(a.length, b.length); index++) {
     const order = a[index]!.localeCompare(b[index]!, undefined, { numeric: true, sensitivity: 'base' })
     if (order !== 0) return order
+    // 只差大小写 / 重音的同名文件夹（Notes 与 notes、resume 与 résumé）是不同的文件夹：再按原文排，
+    // 否则两者的子文件夹会交错，缩进到错的父文件夹下
+    if (a[index] !== b[index]) return a[index]! < b[index]! ? -1 : 1
   }
   return a.length - b.length
 }

@@ -1496,6 +1496,12 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   margin-top: 8px;
 }
 
+/* 文件夹很多时（如 Obsidian 库）列表自己滚动，文档列表仍有空间 */
+.ink-folder-list {
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
 .ink-nav-section {
   display: flex;
   align-items: center;

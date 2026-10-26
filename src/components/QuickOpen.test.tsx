@@ -128,4 +128,30 @@ describe('Quick Open（spec W3）', () => {
     const input = (await screen.findByPlaceholderText('Search documents, # for tags')) as HTMLInputElement
     expect(input.value).toBe('#plan')
   })
+
+  it('重新打开时重新搜索标签段落（文档可能改过），不沿用上次的位置', async () => {
+    const openDocument = vi.fn()
+    useDocumentStore.setState({ openDocument })
+    let start = 10
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'search_tags') {
+        return [{ path: '/library/a.md', fileName: 'a.md', dirPrefix: '', line: 1, snippet: '#foo', start, end: start + 4, tag: 'foo' }]
+      }
+      return []
+    })
+    useUiStore.setState({ quickOpenVisible: false })
+    render(<QuickOpen />)
+    act(() => useUiStore.getState().showQuickOpen('#foo'))
+    expect(await screen.findByText('#foo')).toBeInTheDocument()
+    act(() => useUiStore.getState().hideQuickOpen())
+
+    start = 50
+    act(() => useUiStore.getState().showQuickOpen('#foo'))
+    await waitFor(() => expect(invokeMock.mock.calls.filter((call) => call[0] === 'search_tags')).toHaveLength(2))
+    const input = await screen.findByPlaceholderText('Search documents, # for tags')
+    await waitFor(() => {
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(openDocument).toHaveBeenLastCalledWith('/library/a.md', [50, 54])
+    })
+  })
 })

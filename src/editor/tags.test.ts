@@ -4,7 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 
 import { buildDecorations } from '@/editor/styledSource'
-import { tagsInLine } from '@/editor/tags'
+import { tagAt, tagsInLine } from '@/editor/tags'
 
 const tags = (line: string) => tagsInLine(line).map((tag) => tag.tag)
 
@@ -40,6 +40,12 @@ describe('标签规则', () => {
     expect(tags('## 计划 #work')).toEqual(['work'])
   })
 
+  it('字符类与 Rust 一致：带元音符号的文字整段算标签，空白按 White_Space', () => {
+    expect(tags('#हिंदी #สวัสดี #Ⓐbc')).toEqual(['हिंदी', 'สวัสดี', 'Ⓐbc'])
+    expect(tags('a\u0085#nel')).toEqual(['nel'])
+    expect(tags('a\ufeff#bom')).toEqual([])
+  })
+
   it('位置是行内的 UTF-16 偏移，含 #', () => {
     const line = '😀 中文 #标签'
     const [tag] = tagsInLine(line)
@@ -55,5 +61,20 @@ describe('编辑器里的标签着色', () => {
   it('代码、链接地址、HTML 注释里的不着色', () => {
     const doc = '`#code` 和 [a](https://x.com/#no)\n\n```\n#inside\n```\n\n    #indented\n\n<!-- #comment -->\n\n正文 #yes'
     expect(highlighted(doc)).toEqual(['#yes'])
+  })
+})
+
+describe('⌘Click 用的 tagAt', () => {
+  const state = EditorState.create({ doc: '今天 #写作/草稿 和 `#code`', extensions: [markdown({ base: markdownLanguage })] })
+  ensureSyntaxTree(state, state.doc.length)
+
+  it('点在标签任意位置都取到整个标签', () => {
+    expect(tagAt(state, 3)).toBe('写作/草稿')
+    expect(tagAt(state, 7)).toBe('写作/草稿')
+  })
+
+  it('不在标签上、或在代码里返回 null', () => {
+    expect(tagAt(state, 1)).toBeNull()
+    expect(tagAt(state, state.doc.length - 3)).toBeNull()
   })
 })

@@ -4,13 +4,16 @@
 //! - `#` 在行首或空白之后（`url#anchor`、`[a](#b)`、`\#x`、`##` 都不算）
 //! - 后面是字母 / 数字（含中文）/ `_` / `-` / `/`，遇到空格或标点结束；末尾的 `-` `/` 不算
 //! - 不能全是数字（`#1`、`#2024` 不算）
-//! - 围栏代码块、行内代码里的不算
+//! - 代码块（围栏、缩进，含引用 / 列表里的）、行内代码、HTML 里的不算：
+//!   用 pulldown-cmark 按 CommonMark 解析，与编辑器的语法树判断一致
 //!
 //! 返回的位置是 UTF-16 偏移（与编辑器的文档位置一致），不是字节偏移。
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::Path;
 
+use pulldown_cmark::{Event, Options, Parser, Tag};
 use serde::Serialize;
 
 use crate::encoding;
@@ -56,60 +59,30 @@ pub struct LineTag {
     pub tag: String,
 }
 
+/// 文档里的一个标签
+struct TagSite<'a> {
+    /// 从 1 开始
+    line_number: usize,
+    line: &'a str,
+    tag: LineTag,
+    /// 标签（含 #）在文档中的 UTF-16 区间
+    utf16_start: usize,
+    utf16_end: usize,
+}
+
 fn is_tag_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '-' || c == '/'
 }
 
-/// 行内代码的字节区间：成对的、等长的反引号串之间（含反引号）
-fn inline_code_ranges(line: &str) -> Vec<(usize, usize)> {
-    let bytes = line.as_bytes();
-    let mut ranges = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] != b'`' {
-            i += 1;
-            continue;
-        }
-        let open_start = i;
-        while i < bytes.len() && bytes[i] == b'`' {
-            i += 1;
-        }
-        let run = i - open_start;
-        // 找下一个等长的反引号串
-        let mut j = i;
-        let mut closed = None;
-        while j < bytes.len() {
-            if bytes[j] != b'`' {
-                j += 1;
-                continue;
-            }
-            let close_start = j;
-            while j < bytes.len() && bytes[j] == b'`' {
-                j += 1;
-            }
-            if j - close_start == run {
-                closed = Some(j);
-                break;
-            }
-        }
-        if let Some(end) = closed {
-            ranges.push((open_start, end));
-            i = end;
-        }
-    }
-    ranges
-}
-
-/// 找出一行里的标签（调用方负责跳过围栏代码块里的行）
+/// 找出一行文本里的标签（不判断代码块等上下文，见 for_each_tag）
 pub fn tags_in_line(line: &str) -> Vec<LineTag> {
-    let code = inline_code_ranges(line);
     let mut out = Vec::new();
     let mut prev: Option<char> = None;
     let mut iter = line.char_indices().peekable();
     while let Some((index, c)) = iter.next() {
         let at_boundary = prev.is_none_or(char::is_whitespace);
         prev = Some(c);
-        if c != '#' || !at_boundary || code.iter().any(|&(s, e)| index >= s && index < e) {
+        if c != '#' || !at_boundary {
             continue;
         }
         let body_start = index + 1;
@@ -135,44 +108,60 @@ pub fn tags_in_line(line: &str) -> Vec<LineTag> {
     out
 }
 
-/// 围栏行（``` / ~~~）：返回围栏字符与长度
-fn fence_of(line: &str) -> Option<(char, usize)> {
-    let trimmed = line.trim_start();
-    if line.len() - trimmed.len() > 3 {
-        return None;
-    }
-    let first = trimmed.chars().next()?;
-    if first != '`' && first != '~' {
-        return None;
-    }
-    let run = trimmed.chars().take_while(|&c| c == first).count();
-    (run >= 3).then_some((first, run))
+/// 代码块、行内代码、HTML 的字节区间（按起点排序、互不重叠）
+fn code_ranges(text: &str) -> Vec<Range<usize>> {
+    // 与编辑器一样按 GFM 解析（表格里的行内代码等）
+    let options =
+        Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    Parser::new_ext(text, options)
+        .into_offset_iter()
+        .filter_map(|(event, range)| match event {
+            Event::Start(Tag::CodeBlock(_))
+            | Event::Start(Tag::HtmlBlock)
+            | Event::Code(_)
+            | Event::InlineHtml(_) => Some(range),
+            _ => None,
+        })
+        .collect()
 }
 
-/// 逐行回调（跳过围栏代码块）：行号从 1 开始、行首的 UTF-16 偏移、行文本
-fn for_each_prose_line(text: &str, mut visit: impl FnMut(usize, usize, &str) -> bool) {
-    let mut fence: Option<(char, usize)> = None;
+/// 按顺序回调文档里的每个标签（跳过代码与 HTML）；回调返回 false 时停止
+fn for_each_tag(text: &str, mut visit: impl FnMut(TagSite) -> bool) {
+    if !text.contains('#') {
+        return;
+    }
+    let code = code_ranges(text);
+    let mut code_index = 0;
+    let mut byte_offset = 0usize;
     let mut utf16_offset = 0usize;
     for (index, line) in text.lines().enumerate() {
-        let line_start = utf16_offset;
+        let line_byte = byte_offset;
+        let line_utf16 = utf16_offset;
+        byte_offset += line.len() + 1;
         utf16_offset += line.encode_utf16().count() + 1;
-        if let Some((ch, run)) = fence_of(line) {
-            match fence {
-                None => fence = Some((ch, run)),
-                Some((open_ch, open_run))
-                    if ch == open_ch && run >= open_run && line.trim().chars().all(|c| c == ch) =>
-                {
-                    fence = None
-                }
-                _ => {}
+        if !line.contains('#') {
+            continue;
+        }
+        for tag in tags_in_line(line) {
+            let at = line_byte + tag.start;
+            while code_index < code.len() && code[code_index].end <= at {
+                code_index += 1;
             }
-            continue;
-        }
-        if fence.is_some() {
-            continue;
-        }
-        if !visit(index + 1, line_start, line) {
-            break;
+            if code.get(code_index).is_some_and(|range| range.start <= at) {
+                continue;
+            }
+            let utf16_start = line_utf16 + line[..tag.start].encode_utf16().count();
+            let utf16_end = utf16_start + line[tag.start..tag.end].encode_utf16().count();
+            let site = TagSite {
+                line_number: index + 1,
+                line,
+                tag,
+                utf16_start,
+                utf16_end,
+            };
+            if !visit(site) {
+                return;
+            }
         }
     }
 }
@@ -212,26 +201,24 @@ pub fn search_tags(root: &Path, query: &str) -> Result<Vec<TagHit>, CommandError
             continue;
         };
         let mut per_file = 0;
-        for_each_prose_line(&text, |line_number, line_start, line| {
-            for tag in tags_in_line(line) {
-                if !tag.tag.to_lowercase().starts_with(&needle) {
-                    continue;
-                }
-                let start = line_start + line[..tag.start].encode_utf16().count();
-                hits.push(TagHit {
-                    path: doc.path.clone(),
-                    file_name: doc.file_name.clone(),
-                    dir_prefix: doc.dir_prefix.clone(),
-                    line: line_number,
-                    snippet: snippet_for(line, tag.start),
-                    start,
-                    end: start + line[tag.start..tag.end].encode_utf16().count(),
-                    tag: tag.tag,
-                });
-                per_file += 1;
-                // 一行有多个匹配的标签只记一次
-                break;
+        let mut last_line = 0;
+        for_each_tag(&text, |site| {
+            // 一行有多个匹配的标签只记一次
+            if site.line_number == last_line || !site.tag.tag.to_lowercase().starts_with(&needle) {
+                return true;
             }
+            last_line = site.line_number;
+            hits.push(TagHit {
+                path: doc.path.clone(),
+                file_name: doc.file_name.clone(),
+                dir_prefix: doc.dir_prefix.clone(),
+                line: site.line_number,
+                snippet: snippet_for(site.line, site.tag.start),
+                start: site.utf16_start,
+                end: site.utf16_end,
+                tag: site.tag.tag,
+            });
+            per_file += 1;
             per_file < MAX_HITS_PER_FILE && hits.len() < MAX_HITS
         });
     }
@@ -245,16 +232,14 @@ pub fn list_tags(root: &Path) -> Result<Vec<TagCount>, CommandError> {
         let Some(text) = read_library_text(&doc) else {
             continue;
         };
-        for_each_prose_line(&text, |_, _, line| {
-            for tag in tags_in_line(line) {
-                counts
-                    .entry(tag.tag.to_lowercase())
-                    .or_insert(TagCount {
-                        tag: tag.tag,
-                        count: 0,
-                    })
-                    .count += 1;
-            }
+        for_each_tag(&text, |site| {
+            counts
+                .entry(site.tag.tag.to_lowercase())
+                .or_insert(TagCount {
+                    tag: site.tag.tag,
+                    count: 0,
+                })
+                .count += 1;
             true
         });
     }
@@ -300,11 +285,30 @@ mod tests {
         assert_eq!(tags("## 计划 #work"), vec!["work"]);
     }
 
+    /// 文档里（跳过代码与 HTML 后）的标签：(行号, 标签, UTF-16 起点)
+    fn doc_tags(text: &str) -> Vec<(usize, String, usize)> {
+        let mut seen = Vec::new();
+        for_each_tag(text, |site| {
+            seen.push((site.line_number, site.tag.tag, site.utf16_start));
+            true
+        });
+        seen
+    }
+
+    fn doc_tag_names(text: &str) -> Vec<String> {
+        doc_tags(text).into_iter().map(|(_, tag, _)| tag).collect()
+    }
+
     #[test]
     fn ignores_inline_code() {
-        assert_eq!(tags("`#code` 和 ``#also`` 外面 #real"), vec!["real"]);
+        assert_eq!(
+            doc_tag_names("`#code` 和 ``#also`` 外面 #real"),
+            vec!["real"]
+        );
         // 没闭合的反引号不算代码
-        assert_eq!(tags("` #open"), vec!["open"]);
+        assert_eq!(doc_tag_names("` #open"), vec!["open"]);
+        // 跨行的行内代码
+        assert_eq!(doc_tag_names("`foo\n#multi` 之后 #after"), vec!["after"]);
     }
 
     #[test]
@@ -316,20 +320,31 @@ mod tests {
 
     #[test]
     fn skips_fenced_code_and_reports_utf16_offsets() {
-        let text = "第一行 #a\n```\n#inside\n```\n中文 #b";
-        let mut seen = Vec::new();
-        for_each_prose_line(text, |line, start, content| {
-            for tag in tags_in_line(content) {
-                let utf16 = start + content[..tag.start].encode_utf16().count();
-                seen.push((line, tag.tag, utf16));
-            }
-            true
-        });
         // "第一行 #a\n" = 6 个 UTF-16 单元 + 换行；"```\n#inside\n```\n" = 16
         assert_eq!(
-            seen,
+            doc_tags("第一行 #a\n```\n#inside\n```\n中文 #b"),
             vec![(1, "a".to_string(), 4), (5, "b".to_string(), 7 + 16 + 3)]
         );
+    }
+
+    #[test]
+    fn skips_code_in_quotes_lists_indented_blocks_and_html() {
+        assert!(doc_tag_names("> ```\n> #include x\n> ```").is_empty());
+        assert!(doc_tag_names("- a\n  - b\n    ```\n    #nested\n    ```").is_empty());
+        assert!(doc_tag_names("- ```\n  #inlist\n  ```").is_empty());
+        assert!(doc_tag_names("para\n\n    #indented").is_empty());
+        assert!(doc_tag_names("<!-- #comment -->").is_empty());
+    }
+
+    #[test]
+    fn unclosed_fence_in_list_item_ends_with_the_item() {
+        // 列表项里没闭合的代码块到列表项结束为止，后面的标签照常算
+        assert_eq!(
+            doc_tag_names("- item\n  ```\n  code\n\nlater #after2"),
+            vec!["after2"]
+        );
+        // 信息串里带反引号的不是围栏
+        assert_eq!(doc_tag_names("```foo`bar\n#afterweird"), vec!["afterweird"]);
     }
 
     #[test]

@@ -3,7 +3,7 @@ import { EditorSelection, EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 
-import { buildDecorations, concealMarkupFacet } from '@/editor/styledSource'
+import { buildDecorations, concealMarkupFacet, cursorEngagedField } from '@/editor/styledSource'
 import { clickTaskSpec, TaskCheckboxWidget, toggleTaskSpec } from '@/editor/tasks'
 
 function stateOf(doc: string, anchor: number, head = anchor) {
@@ -91,6 +91,17 @@ describe('⌘L 切换任务', () => {
     expect(toggle('- [ ] a\n  b', 0, 11)?.[0]).toBe('- [x] a\n  b')
   })
 
+  it('列表项里的代码块：代码行上按 ⌘L 不动，也不勾所属的列表项', () => {
+    const doc = '- [ ] a\n\n  ```\n  code\n  ```'
+    expect(toggle(doc, doc.indexOf('code') + 1)).toBeNull()
+  })
+
+  it('全选十几万行也不会栈溢出', () => {
+    const doc = Array.from({ length: 150_000 }, () => 'x').join('\n')
+    const state = EditorState.create({ doc, selection: { anchor: 0, head: doc.length } })
+    expect(() => toggleTaskSpec(state)).not.toThrow()
+  })
+
   it('列表项里直接是引用：没有能挂任务框的段落，不动', () => {
     expect(toggle('- > q', 4)).toBeNull()
   })
@@ -155,6 +166,17 @@ describe('光标外显示复选框', () => {
 
   it('普通列表项、代码块里的 [ ] 不换', () => {
     expect(checkboxes('- a\n\n```\n- [ ] b\n```\n\n正文', 22)).toEqual([])
+  })
+
+  it('点复选框不算「动过光标」：光标所在行（刚打开时的第一行）不会露出标记', () => {
+    const state = EditorState.create({
+      doc: '- [ ] first\n- [ ] second',
+      extensions: [markdown({ base: markdownLanguage }), cursorEngagedField],
+    })
+    ensureSyntaxTree(state, state.doc.length)
+    const next = state.update(clickTaskSpec(state, 12)!).state
+    expect(next.doc.toString()).toBe('- [ ] first\n- [x] second')
+    expect(next.field(cursorEngagedField)).toBe(false)
   })
 
   it('点控件起点（- 的位置）切换这一项', () => {

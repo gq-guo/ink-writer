@@ -26,6 +26,13 @@ describe('文件夹列表', () => {
     expect(listFolders([doc('A/10/'), doc('A/9/')]).map((folder) => folder.prefix)).toEqual(['A/', 'A/9/', 'A/10/'])
   })
 
+  it('只差大小写 / 重音的同名文件夹各自带着自己的子文件夹', () => {
+    const prefixes = listFolders([doc('Notes/'), doc('notes/'), doc('notes/x/'), doc('Notes/y/')]).map(
+      (folder) => folder.prefix,
+    )
+    expect(prefixes).toEqual(['Notes/', 'Notes/y/', 'notes/', 'notes/x/'])
+  })
+
   it('没有子文件夹时为空', () => {
     expect(listFolders([doc(''), doc('')])).toEqual([])
   })

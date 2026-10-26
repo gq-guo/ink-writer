@@ -23,8 +23,10 @@ export interface LineTag {
   tag: string
 }
 
-const TAG_CHAR = /[\p{L}\p{N}_\-/]/u
-const WHITESPACE = /\s/u
+/** 与 Rust 的 char::is_alphanumeric（Alphabetic + Numeric）一致：含印地语、泰语等的元音符号 */
+const TAG_CHAR = /[\p{Alphabetic}\p{N}_\-/]/u
+/** 与 Rust 的 char::is_whitespace（White_Space 属性）一致 */
+const WHITESPACE = /\p{White_Space}/u
 
 /** 找出一行文本里的标签（不判断代码块等上下文） */
 export function tagsInLine(line: string): LineTag[] {
@@ -95,16 +97,28 @@ export interface TagHandlerOptions {
   onOpenTag: (tag: string) => void
 }
 
-/** ⌘Click 标签（styledSource 给标签加了 cm-md-tag） */
+/** pos 所在的标签（不含 #）；不在标签上返回 null */
+export function tagAt(state: EditorState, pos: number): string | null {
+  const line = state.doc.lineAt(pos)
+  const tag = tagsInLine(line.text).find((item) => pos >= line.from + item.start && pos <= line.from + item.end)
+  if (!tag || insideNonProse(state, line.from + tag.start)) return null
+  return tag.tag
+}
+
+/**
+ * ⌘Click 标签（styledSource 给标签加了 cm-md-tag）。
+ * 按点击位置重新识别整个标签：搜索高亮等别的装饰可能把标签的 span 切成几段
+ */
 export function inkTagHandler(options: TagHandlerOptions) {
   return EditorView.domEventHandlers({
-    mousedown(event) {
+    mousedown(event, view) {
       if (!event.metaKey && !event.ctrlKey) return false
-      const target = event.target instanceof Element ? event.target.closest('.cm-md-tag') : null
-      const text = target?.textContent ?? ''
-      if (!text.startsWith('#')) return false
+      if (!(event.target instanceof Element) || !event.target.closest('.cm-md-tag')) return false
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+      const tag = pos === null ? null : tagAt(view.state, pos)
+      if (!tag) return false
       event.preventDefault()
-      options.onOpenTag(text.slice(1))
+      options.onOpenTag(tag)
       return true
     },
   })
