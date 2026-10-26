@@ -46,6 +46,7 @@ import { inkOutlinePlugin } from './outline'
 import { darkCompartment, inkDarkExtension, inkThemeExtension, themeCompartment } from './theme'
 import { inkSpellcheck, spellcheckCompartment } from './spellcheck'
 import { inkListKeymap } from './listKeys'
+import { inkTaskClickHandler } from './tasks'
 
 export interface InkExtensionOptions {
   /** 初始是否为深色主题 */
@@ -119,6 +120,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       onOpenUrl: options.onOpenUrl,
       onRevealPath: options.onRevealPath,
     }),
+    inkTaskClickHandler,
     inkDocHeader,
     inkOutlinePlugin(options.onOutline),
     placeholderCompartment.of(makePlaceholder(useLocaleStore.getState().locale)),

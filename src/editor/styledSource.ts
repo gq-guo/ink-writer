@@ -363,7 +363,16 @@ export function buildDecorations(
             conceal(node.from, node.from + 1)
             break
           }
-          case 'TaskMarker':
+          case 'TaskMarker': {
+            // 任务框可点（tasks.ts 按 cm-md-task-marker 认）；已完成的 [x] 后面的文字变淡加删除线
+            addMark(node.from, node.to, 'cm-md-mark')
+            addMark(node.from, node.to, 'cm-md-task-marker')
+            const task = node.parent
+            if (task?.name === 'Task' && /[xX]/.test(state.doc.sliceString(node.from + 1, node.to - 1))) {
+              addMark(node.to, task.to, 'cm-md-task-done')
+            }
+            break
+          }
           case 'TableDelimiter':
           case 'HTMLTag':
           case 'HTMLBlock':

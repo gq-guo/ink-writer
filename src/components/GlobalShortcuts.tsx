@@ -21,6 +21,7 @@ const SHORTCUT_COMMANDS: Record<string, string> = {
   'mod+p': 'doc.quickOpen',
   'mod+k': 'app.palette',
   'mod+f': 'editor.find',
+  'mod+l': 'editor.toggleTask',
   'alt+\\': 'app.sidebar',
   'mod+shift+f': 'mode.focus',
   'mod+shift+t': 'mode.typewriter',

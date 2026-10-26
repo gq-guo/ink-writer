@@ -123,6 +123,7 @@ async function buildAndInstall(): Promise<void> {
       native('SelectAll', t('mb.selectAll')),
       separator(),
       command('editor.find', t('mb.find'), 'CmdOrCtrl+F'),
+      command('editor.toggleTask', t('mb.toggleTask'), 'CmdOrCtrl+L'),
     ],
   })
 

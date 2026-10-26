@@ -197,6 +197,7 @@ describe('Markdown 全格式：列表与任务', () => {
 
   it('任务框弱化，任务里的格式照常处理', () => {
     expect(marksOf('- [x] 已完成任务', 'mark')).toContain('[x]')
+    expect(marksOf('- [x] 已完成任务', 'task-done')).toEqual([' 已完成任务'])
     expect(line('- [ ] 任务里有 **粗体** 和 `代码`').shown).toBe('- [ ] 任务里有 粗体 和 代码')
   })
 })

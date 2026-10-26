@@ -69,6 +69,14 @@ export function buildCommands(): Command[] {
       run: () => editorBridge.openFind?.(),
     },
     {
+      group: 'edit',
+      id: 'editor.toggleTask',
+      title: t('cmd.editor.toggleTask'),
+      shortcut: '⌘L',
+      run: () => editorBridge.toggleTask(),
+      when: () => useDocumentStore.getState().activeDocument !== null,
+    },
+    {
       group: 'view',
       id: 'doc.quickOpen',
       title: t('cmd.doc.quickOpen'),

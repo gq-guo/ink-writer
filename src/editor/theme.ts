@@ -114,6 +114,15 @@ export const inkThemeSpec = {
     textDecoration: 'line-through',
     textDecorationColor: 'var(--secondary)',
   },
+  // 任务框可点；已完成项的文字与删除线都用弱化色
+  '.cm-md-task-marker': {
+    cursor: 'pointer',
+  },
+  '.cm-md-task-done, .cm-md-task-done *': {
+    color: 'var(--secondary)',
+    textDecoration: 'line-through',
+    textDecorationColor: 'var(--secondary)',
+  },
   '.cm-md-code': {
     fontFamily: 'var(--code-font)',
     fontSize: '0.8em',
