@@ -27,10 +27,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const FONT_STACKS: Record<AppSettings['fontFamily'], string> = {
   system: `-apple-system, "PingFang SC", sans-serif`,
   quattro: `"iA Writer Quattro", -apple-system, "PingFang SC", sans-serif`,
-  plex: `"IBM Plex Sans", -apple-system, "PingFang SC", sans-serif`,
   // ui-serif = macOS 的 New York：正文有文学气质，界面仍用系统无衬线
   serif: `ui-serif, "New York", Georgia, "Songti SC", serif`,
   mono: `"JetBrains Mono", "PingFang SC", monospace`,
+}
+
+/**
+ * 读回旧设置里的字体：已移除的选项不能原样留着（FONT_STACKS 里查不到会让正文字体失效）。
+ * plex 从未内置 IBM Plex Sans，用户实际看到的就是系统字体，所以迁到 system；
+ * 其余未知值回到默认。
+ */
+export function normalizeFontFamily(value: unknown): AppSettings['fontFamily'] {
+  if (typeof value === 'string' && Object.hasOwn(FONT_STACKS, value)) return value as AppSettings['fontFamily']
+  return value === 'plex' ? 'system' : DEFAULT_SETTINGS.fontFamily
 }
 
 export const FONT_SIZE_RANGE = { min: 14, max: 24 } as const
@@ -109,6 +118,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...DEFAULT_SETTINGS,
       ...stored,
       ...(library ? { libraryPath: library.exists ? (library.path ?? '') : '' } : {}),
+      fontFamily: normalizeFontFamily(stored.fontFamily),
       fontSize: clamp(stored.fontSize ?? DEFAULT_SETTINGS.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max),
       lineHeight: clamp(stored.lineHeight ?? DEFAULT_SETTINGS.lineHeight, 1.4, 2.0),
       contentWidth: clamp(stored.contentWidth ?? DEFAULT_SETTINGS.contentWidth, 560, 960),

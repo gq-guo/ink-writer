@@ -9,10 +9,9 @@ import { useSettingsStore, FONT_STACKS } from '@/stores/settingsStore'
 import { useT } from '@/lib/i18n'
 import type { AppSettings } from '@/lib/types'
 
-const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string | null> = {
+const FONT_LABEL_KEYS: Record<AppSettings['fontFamily'], string> = {
   system: 'type.font.system',
-  quattro: null,
-  plex: null,
+  quattro: 'type.font.quattro',
   serif: 'type.font.serif',
   mono: 'type.font.mono',
 }
@@ -46,7 +45,7 @@ export function TypographyPopover({ onClose }: { onClose: () => void }) {
             style={{ fontFamily: FONT_STACKS[family] }}
             onClick={() => update({ fontFamily: family })}
           >
-            {FONT_LABEL_KEYS[family] ? t(FONT_LABEL_KEYS[family]!) : family}
+            {t(FONT_LABEL_KEYS[family])}
           </button>
         ))}
       </div>
