@@ -41,14 +41,21 @@ const documents = [
 describe('Sidebar（spec W2）', () => {
   beforeEach(() => {
     invokeMock.mockReset()
+    // 每个用例自己定语言，不依赖上一个用例切过的 locale
+    syncLocale('zh-CN')
     useUiStore.setState({ sidebarVisible: true, sidebarWidth: 240 })
     useDocumentStore.setState({ documents, activeDocument: null })
   })
 
-  it('按 Today / Yesterday / Earlier 分组渲染', () => {
+  it('按 今天 / 昨天 / 更早 分组渲染（英文界面为 Today / Yesterday / Earlier）', () => {
+    const { unmount } = render(<Sidebar />)
+    expect(screen.getByText('今天')).toBeInTheDocument()
+    expect(screen.getByText('昨天')).toBeInTheDocument()
+    expect(screen.getByText('更早')).toBeInTheDocument()
+    unmount()
+    syncLocale('en')
     render(<Sidebar />)
     expect(screen.getByText('Today')).toBeInTheDocument()
-    expect(screen.getByText('Yesterday')).toBeInTheDocument()
     expect(screen.getByText('Earlier')).toBeInTheDocument()
   })
 
