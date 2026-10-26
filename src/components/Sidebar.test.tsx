@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }))
+const { invokeMock, menuNewMock, popupMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  menuNewMock: vi.fn(),
+  popupMock: vi.fn(),
+}))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
+vi.mock('@tauri-apps/api/menu', () => ({
+  Menu: { new: menuNewMock },
+}))
 
 import { Sidebar } from '@/components/Sidebar'
 import { useDocumentStore } from '@/stores/documentStore'
@@ -85,14 +92,64 @@ describe('Sidebar（spec W2）', () => {
     expect(openDocument).toHaveBeenCalledWith('/library/a.md')
   })
 
-  it('右键弹出 Open / 收藏 / Rename / Reveal in Finder / Move to Trash', () => {
+  it('右键弹出 Open / 收藏 / Rename / Reveal in Finder / Move to Trash（浏览器里是页面内菜单）', async () => {
     render(<Sidebar />)
     fireEvent.contextMenu(screen.getByText('今天的文档'))
-    expect(screen.getByText('打开')).toBeInTheDocument()
+    expect(await screen.findByText('打开')).toBeInTheDocument()
     expect(screen.getByText('加入收藏')).toBeInTheDocument()
     expect(screen.getByText('重命名…')).toBeInTheDocument()
     expect(screen.getByText('在访达中显示')).toBeInTheDocument()
     expect(screen.getByText('移到废纸篓')).toBeInTheDocument()
+  })
+
+  it('页面内菜单：不带图标，打开与危险操作各自用分隔线隔开，被右键的条目带框', async () => {
+    const { container } = render(<Sidebar />)
+    fireEvent.contextMenu(screen.getByText('今天的文档'))
+    const menu = (await screen.findByRole('menu')) as HTMLElement
+    expect(menu.querySelectorAll('.ink-icon')).toHaveLength(0)
+    expect([...menu.children].map((child) => child.getAttribute('role') ?? '')).toEqual([
+      'menuitem',
+      'separator',
+      'menuitem',
+      'menuitem',
+      'menuitem',
+      'separator',
+      'menuitem',
+    ])
+    expect(container.querySelector('.ink-doc-item[data-context="true"]')?.textContent).toContain('今天的文档')
+    fireEvent.click(screen.getByText('打开'))
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(container.querySelector('.ink-doc-item[data-context="true"]')).toBeNull()
+  })
+
+  it('App 里用 macOS 原生菜单：同样的条目与分隔线，不再画页面内菜单', async () => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    const openDocument = vi.fn()
+    useDocumentStore.setState({ openDocument } as never)
+    popupMock.mockResolvedValue(undefined)
+    menuNewMock.mockResolvedValue({ popup: popupMock, close: vi.fn().mockResolvedValue(undefined) })
+    try {
+      render(<Sidebar />)
+      fireEvent.contextMenu(screen.getByText('今天的文档'))
+      await vi.waitFor(() => expect(popupMock).toHaveBeenCalled())
+      const items = menuNewMock.mock.calls[0]![0].items as ({ text: string; action: () => void } | { item: string })[]
+      expect(items.map((item) => ('text' in item ? item.text : item.item))).toEqual([
+        '打开',
+        'Separator',
+        '加入收藏',
+        '重命名…',
+        '在访达中显示',
+        'Separator',
+        '移到废纸篓',
+      ])
+      expect(screen.queryByRole('menu')).toBeNull()
+      ;(items[0] as { action: () => void }).action()
+      expect(openDocument).toHaveBeenCalledWith('/library/a.md')
+    } finally {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+      menuNewMock.mockReset()
+      popupMock.mockReset()
+    }
   })
 
   it('Documents 下是 All / Recent / Favorites 与数量，底部有 New Document', () => {
