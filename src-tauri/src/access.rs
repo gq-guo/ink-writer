@@ -89,9 +89,13 @@ impl Access {
         }
     }
 
-    /// 文档读写 / 重命名 / 删除：库内，或用户打开过的库外文件
+    /// 文档读写 / 重命名 / 删除：库内，或用户打开过的库外文件。
+    /// 只能是文件：库根目录或子文件夹交给 delete_document 会整个移进废纸篓
     pub fn check_document(&self, path: &Path) -> Result<(), CommandError> {
         let normalized = normalize(path)?;
+        if self.library.as_deref() == Some(normalized.as_path()) || normalized.is_dir() {
+            return Err(denied(path));
+        }
         if self.in_library(&normalized) || self.opened_files.contains(&normalized) {
             Ok(())
         } else {
@@ -179,6 +183,14 @@ mod tests {
         assert!(access.check_document(&library.join("new.md")).is_ok());
         assert!(access.check_document_dir(&library).is_ok());
         assert!(access.check_library_root(&library).is_ok());
+    }
+
+    #[test]
+    fn rejects_library_root_and_folders_as_documents() {
+        let (access, library, _) = library_access("folders");
+        fs::create_dir_all(library.join("sub")).unwrap();
+        assert!(access.check_document(&library).is_err());
+        assert!(access.check_document(&library.join("sub")).is_err());
     }
 
     #[test]

@@ -41,7 +41,8 @@ describe('命名规则（spec §7.2）', () => {
   it('补全 .md 扩展名', () => {
     expect(ensureMarkdownExtension('note')).toBe('note.md')
     expect(ensureMarkdownExtension('note.md')).toBe('note.md')
-    expect(ensureMarkdownExtension('note.txt')).toBe('note.txt')
+    // 库里只索引 .md：自带的 .txt 只算名字的一部分
+    expect(ensureMarkdownExtension('note.txt')).toBe('note.txt.md')
   })
 
   it('新建文档取最小未占用序号', () => {

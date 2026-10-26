@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildExportStylesheet, buildStandaloneHtml } from '@/lib/export-html'
+import { buildExportStylesheet, buildStandaloneHtml, markdownToHtml } from '@/lib/export-html'
 import { FONT_STACKS } from '@/stores/settingsStore'
 
 const CODE_FONT_STACK = `"JetBrains Mono", "SF Mono", Menlo, monospace`
@@ -43,5 +43,26 @@ describe('buildStandaloneHtml 导出字体（spec §15.1）', () => {
     const fontRules = css.match(/font-family:/g) ?? []
     // 只有 body 与 code 两处声明字体
     expect(fontRules).toHaveLength(2)
+  })
+})
+
+describe('markdownToHtml 链接协议', () => {
+  it('drops javascript: and other unsafe protocols, keeps web and relative links', () => {
+    const html = markdownToHtml(
+      [
+        '[a](javascript:alert(1))',
+        '[b](java\tscript:alert(1))',
+        '![c](data:image/svg+xml;base64,AAAA)',
+        '[d](https://example.com)',
+        '[e](mailto:me@example.com)',
+        '![f](assets/shot.png)',
+        '[g](#heading)',
+      ].join('\n\n'),
+    )
+    expect(html).not.toMatch(/javascript|data:image/i)
+    expect(html).toContain('href="https://example.com"')
+    expect(html).toContain('href="mailto:me@example.com"')
+    expect(html).toContain('src="assets/shot.png"')
+    expect(html).toContain('href="#heading"')
   })
 })

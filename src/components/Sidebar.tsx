@@ -18,7 +18,7 @@ import { showNativeContextMenu, type ContextMenuEntry } from '@/lib/contextMenu'
 import { isInFolder, listFolders } from '@/lib/folders'
 import { GROUP_ORDER, groupFor, listTime, type DateGroup } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
+import { ensureMarkdownExtension, markdownExtensionOf, sanitizeFileName } from '@/lib/naming'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -151,7 +151,10 @@ export function Sidebar() {
 
   const commitRename = useCallback(
     (document: DocumentMeta) => {
-      const name = ensureMarkdownExtension(sanitizeFileName(renameValue))
+      const name = ensureMarkdownExtension(
+        sanitizeFileName(renameValue),
+        markdownExtensionOf(document.fileName),
+      )
       setRenamingPath(null)
       if (!name) return
       void renameDocument(document.path, name)

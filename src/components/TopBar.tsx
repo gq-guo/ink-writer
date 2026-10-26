@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
-import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
+import { ensureMarkdownExtension, markdownExtensionOf, sanitizeFileName } from '@/lib/naming'
 import { displayNameOf } from '@/lib/title'
 import { useT } from '@/lib/i18n'
 import { editorBridge } from '@/editor/bridge'
@@ -89,7 +89,10 @@ export function TopBar() {
     setEditing(false)
     editorBridge.focus()
     if (!activeDocument) return
-    const name = ensureMarkdownExtension(sanitizeFileName(nameValue))
+    const name = ensureMarkdownExtension(
+      sanitizeFileName(nameValue),
+      markdownExtensionOf(activeDocument.fileName),
+    )
     if (!name || name === activeDocument.fileName) return
     void renameDocument(activeDocument.path, name)
   }

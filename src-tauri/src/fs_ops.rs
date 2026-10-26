@@ -19,7 +19,8 @@ pub struct DocumentMeta {
     pub path: String,
     pub file_name: String,
     pub dir_prefix: String,
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
     pub size: u64,
     /// 文件名去扩展名（空则 "Untitled"）：文件名就是文档的名字，不再取正文里的 H1
     pub display_title: String,
@@ -30,7 +31,8 @@ pub struct DocumentMeta {
 pub struct ReadDocumentResult {
     pub content: String,
     pub encoding: String,
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
     pub size: u64,
     pub line_ending: String,
 }
@@ -38,7 +40,8 @@ pub struct ReadDocumentResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteResult {
-    pub mtime: i64,
+    /// 修改时间（Unix 秒，带毫秒小数：乐观锁要分得清同一秒内的两次写入）
+    pub mtime: f64,
 }
 
 /// 命令错误：前端据此区分「保存冲突」与普通错误
@@ -46,7 +49,7 @@ pub struct WriteResult {
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum CommandError {
     /// mtime 乐观锁失败：磁盘上的文件已被其他程序修改
-    MtimeConflict { disk_mtime: i64 },
+    MtimeConflict { disk_mtime: f64 },
     /// 普通错误（IO / 编码 / 权限 …）：code 由前端按当前语言翻译（i18n 的 `error.<code>`），
     /// detail 是路径 / 系统错误等不需要翻译的原文
     Error { code: &'static str, detail: String },
@@ -82,19 +85,35 @@ fn io_message(path: &Path, err: &std::io::Error) -> CommandError {
     CommandError::new(code, format!("{} ({})", path.display(), err))
 }
 
-pub fn stat_info(path: &Path) -> Result<(i64, u64), CommandError> {
+pub fn stat_info(path: &Path) -> Result<(f64, u64), CommandError> {
     let meta = fs::metadata(path).map_err(|e| io_message(path, &e))?;
-    let mtime = meta
-        .modified()
+    Ok((mtime_of(&meta), meta.len()))
+}
+
+/// 修改时间：Unix 秒，保留到毫秒（截到整秒的话，同一秒里的外部修改会骗过乐观锁）。
+/// 毫秒精度的小数经 JSON 往返是精确的，前端原样传回来可以直接比较相等
+pub fn mtime_of(meta: &fs::Metadata) -> f64 {
+    meta.modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    Ok((mtime, meta.len()))
+        .map(|d| d.as_millis() as f64 / 1000.0)
+        .unwrap_or(0.0)
 }
 
 fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
+}
+
+/// Finder 能用 Ink 打开的几种扩展名（tauri.conf.json 的 fileAssociations）
+fn has_markdown_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .map(|e| {
+            ["md", "markdown", "mdown", "txt"]
+                .iter()
+                .any(|ext| e.eq_ignore_ascii_case(ext))
+        })
+        .unwrap_or(false)
 }
 
 fn is_markdown(name: &str) -> bool {
@@ -152,7 +171,7 @@ pub fn meta_for_testing(path: &Path) -> DocumentMeta {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default(),
         dir_prefix: String::new(),
-        mtime: 0,
+        mtime: 0.0,
         size: 0,
         display_title: String::new(),
     })
@@ -201,7 +220,7 @@ pub fn list_documents(root: &Path) -> Result<Vec<DocumentMeta>, CommandError> {
         }
     }
 
-    out.sort_by(|a, b| b.mtime.cmp(&a.mtime).then(a.path.cmp(&b.path)));
+    out.sort_by(|a, b| b.mtime.total_cmp(&a.mtime).then(a.path.cmp(&b.path)));
     Ok(out)
 }
 
@@ -223,7 +242,19 @@ pub fn read_document(path: &Path) -> Result<ReadDocumentResult, CommandError> {
 }
 
 /// 原子写：写临时文件 → fsync → rename
+///
+/// 目标是符号链接时写到它指向的文件（rename 会把链接本身换成普通文件，真正的文件就再也不更新了）；
+/// 临时文件沿用原文件的权限位
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
+    let resolved;
+    let path = match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            resolved = fs::canonicalize(path).map_err(|e| io_message(path, &e))?;
+            resolved.as_path()
+        }
+        _ => path,
+    };
+    let permissions = fs::metadata(path).ok().map(|meta| meta.permissions());
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| io_message(parent, &e))?;
     }
@@ -237,6 +268,9 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
         let mut file = fs::File::create(&tmp).map_err(|e| io_message(&tmp, &e))?;
         file.write_all(bytes).map_err(|e| io_message(&tmp, &e))?;
         file.sync_all().map_err(|e| io_message(&tmp, &e))?;
+    }
+    if let Some(permissions) = permissions {
+        let _ = fs::set_permissions(&tmp, permissions);
     }
 
     fs::rename(&tmp, path).map_err(|e| {
@@ -257,7 +291,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
 pub fn write_document(
     path: &Path,
     content: &str,
-    expected_mtime: Option<i64>,
+    expected_mtime: Option<f64>,
 ) -> Result<WriteResult, CommandError> {
     if let Some(expected) = expected_mtime {
         if let Ok((current, _)) = stat_info(path) {
@@ -296,6 +330,10 @@ pub fn write_new_text_file(path: &Path, content: &str) -> Result<String, Command
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    // 只用来写冲突副本：限定为 Markdown 文档，不能借它在文档旁边写 .zprofile 之类的文件
+    if !is_single_file_name(&file_name) || !has_markdown_extension(&file_name) {
+        return Err(CommandError::new("invalidFileName", file_name));
+    }
     let (stem, ext) = match file_name.rfind('.') {
         Some(idx) if idx > 0 => (file_name[..idx].to_string(), file_name[idx..].to_string()),
         _ => (file_name.clone(), String::new()),
@@ -316,6 +354,10 @@ pub fn write_new_text_file(path: &Path, content: &str) -> Result<String, Command
 
 /// 在目录中创建新文档，取最小未占用序号：`Untitled.md` → `Untitled 2.md`
 pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, CommandError> {
+    // base_name 来自 webview：`../../x` 会把新文档建到库外
+    if !is_single_file_name(base_name) {
+        return Err(CommandError::new("invalidFileName", base_name));
+    }
     fs::create_dir_all(dir).map_err(|e| io_message(dir, &e))?;
 
     let taken: Vec<String> = fs::read_dir(dir)
@@ -342,17 +384,22 @@ pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, Comm
         .ok_or_else(|| CommandError::new("createFailed", path.display().to_string()))
 }
 
+/// 只由一个普通路径分量组成的文件名（不含 `/`、`..`），且不以 `.` 开头（不生成隐藏文件）
+fn is_single_file_name(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) && !name.starts_with('.')
+}
+
 /// 重命名（仅同目录，spec §7.2）：目标名已被占用时自动加 `-2`、`-3`……，返回实际路径
 pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandError> {
     let parent = path
         .parent()
         .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
     // 只接受单个文件名：`../x.md` 或 `a/b.md` 会把文件挪出原目录
-    let mut components = Path::new(new_name).components();
-    if !matches!(
-        (components.next(), components.next()),
-        (Some(std::path::Component::Normal(_)), None)
-    ) {
+    if !is_single_file_name(new_name) {
         return Err(CommandError::new("invalidFileName", new_name));
     }
 
@@ -383,7 +430,8 @@ fn is_same_file(a: &Path, b: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/** 复制整个文档库（更换保存位置用）：复制 .md 与 assets，重名跳过，不删除旧库 */
+/** 复制整个文档库（更换保存位置用）：复制全部文件（.md、assets 里的图片等），重名跳过，不删除旧库；
+ *  copied / skipped 只统计 .md，给提示文案用 */
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyStats {
@@ -419,12 +467,18 @@ fn copy_library_inner(from: &Path, to: &Path, stats: &mut CopyStats) -> Result<(
             // 只复制文档内容（.md 与 assets 等媒体目录），其他目录也一并复制以保持相对结构
             fs::create_dir_all(&target).map_err(|e| io_message(&target, &e))?;
             copy_library_inner(&source, &target, stats)?;
-        } else if file_type.is_file() && is_markdown(&name) {
+        } else if file_type.is_file() {
+            // 图片等附件也要带过去，否则新库里的 ![](assets/x.png) 全部失效
+            let markdown = is_markdown(&name);
             if target.exists() {
-                stats.skipped += 1;
+                if markdown {
+                    stats.skipped += 1;
+                }
             } else {
                 fs::copy(&source, &target).map_err(|e| io_message(&source, &e))?;
-                stats.copied += 1;
+                if markdown {
+                    stats.copied += 1;
+                }
             }
         }
     }
@@ -481,10 +535,18 @@ pub fn copy_image_bytes(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "image.png".into());
+    // 空格、括号等在 Markdown 链接目标里要转义才合法（macOS 截图名全是空格）：直接换成 -
     let safe: String = base
         .chars()
-        .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+        .map(|c| {
+            if c.is_whitespace() || "/\\:*?\"<>|()[]#%".contains(c) {
+                '-'
+            } else {
+                c
+            }
+        })
         .collect();
+    let safe = safe.trim_start_matches(['.', '-']).to_string();
     let safe = if safe.is_empty() {
         "image.png".to_string()
     } else {
@@ -563,12 +625,38 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_follows_symlinks_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("symlink");
+        let real = dir.join("real.md");
+        let link = dir.join("link.md");
+        fs::write(&real, "old").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        write_document(&link, "new", None).unwrap();
+
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "new");
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn mtime_conflict_is_detected() {
         let dir = temp_dir("conflict");
         let path = dir.join("y.md");
         let result = write_document(&path, "one", None).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1100));
+        // 同一秒内的外部修改也要能发现（以前 mtime 截到整秒，这里会被放过去）
+        std::thread::sleep(std::time::Duration::from_millis(20));
         write_document(&path, "two", None).unwrap();
         let err = write_document(&path, "three", Some(result.mtime)).unwrap_err();
         match err {
@@ -640,10 +728,12 @@ mod tests {
         let from = dir.join("from");
         let to = dir.join("to");
         fs::create_dir_all(from.join("sub")).unwrap();
+        fs::create_dir_all(from.join("assets")).unwrap();
         fs::create_dir_all(&to).unwrap();
         fs::write(from.join("a.md"), "a").unwrap();
         fs::write(from.join("sub/b.md"), "b").unwrap();
         fs::write(from.join("notes.txt"), "t").unwrap();
+        fs::write(from.join("assets/shot.png"), b"png").unwrap();
         // 目标已存在同名文件 → 跳过
         fs::write(to.join("a.md"), "old").unwrap();
 
@@ -652,8 +742,22 @@ mod tests {
         assert_eq!(stats.skipped, 1);
         assert_eq!(fs::read_to_string(to.join("sub/b.md")).unwrap(), "b");
         assert_eq!(fs::read_to_string(to.join("a.md")).unwrap(), "old");
+        // 附件一起复制（不计入文档数）
+        assert_eq!(fs::read(to.join("assets/shot.png")).unwrap(), b"png");
+        assert!(to.join("notes.txt").exists());
         // 旧库不受影响
         assert!(from.join("a.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn webview_supplied_names_stay_single_documents() {
+        let dir = temp_dir("names");
+        assert!(create_document(&dir, "../escape").is_err());
+        assert!(create_document(&dir, ".hidden").is_err());
+        assert!(write_new_text_file(&dir.join(".zprofile"), "x").is_err());
+        assert!(write_new_text_file(&dir.join("run.sh"), "x").is_err());
+        assert!(write_new_text_file(&dir.join("Note (Conflicted Copy).md"), "x").is_ok());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -666,6 +770,19 @@ mod tests {
         let b = copy_image_bytes(&doc_dir, "shot.png", b"png").unwrap();
         assert_eq!(a, "assets/shot.png");
         assert_eq!(b, "assets/shot-2.png");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_image_bytes_makes_markdown_safe_names() {
+        let dir = temp_dir("image-names");
+        let doc_dir = dir.join("doc");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let rel =
+            copy_image_bytes(&doc_dir, "Screenshot 2026-10-26 at 10.00 (2).png", b"x").unwrap();
+        assert_eq!(rel, "assets/Screenshot-2026-10-26-at-10.00--2-.png");
+        let hidden = copy_image_bytes(&doc_dir, ".secret.png", b"x").unwrap();
+        assert_eq!(hidden, "assets/secret.png");
         let _ = fs::remove_dir_all(&dir);
     }
 

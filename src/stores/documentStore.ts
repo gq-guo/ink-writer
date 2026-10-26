@@ -21,7 +21,7 @@ import type {
   WriteResult,
 } from '@/lib/types'
 import { displayNameOf, followsFirstLine, nameFromFirstLine, sameName } from '@/lib/title'
-import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
+import { ensureMarkdownExtension, markdownExtensionOf, sanitizeFileName } from '@/lib/naming'
 import { editorBridge } from '@/editor/bridge'
 import { useEditorStore } from './editorStore'
 import { useSettingsStore } from './settingsStore'
@@ -39,6 +39,10 @@ const MAX_RETRIES = 3
 const SAVED_LINGER_MS = 1500
 /** 新文档按第一行自动命名：停笔这么久之后再改文件名 */
 const AUTO_NAME_DEBOUNCE_MS = 1000
+/** 离开前落盘最多等这么久（网络盘卡住时不能把切换 / 退出一起卡死） */
+const LEAVE_FLUSH_TIMEOUT_MS = 5000
+/** 写入失败被拦下后，这段时间内再操作一次视为放弃未保存的修改 */
+const DISCARD_CONFIRM_MS = 10_000
 
 export interface FsEventPayload {
   path: string
@@ -61,6 +65,11 @@ interface DocumentState {
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
   onEditorChange: (text: string) => void
   flushSave: () => Promise<void>
+  /**
+   * 离开当前文档（切换 / 新建 / 换库 / 退出）前调用：先落盘，没存上就拦下并提示。
+   * 返回 true 才能继续。
+   */
+  prepareToLeave: () => Promise<boolean>
   /** auto：自动命名（按第一行）发起的改名，不提示撞名、也不会停止自动命名 */
   renameDocument: (path: string, newName: string, options?: { auto?: boolean }) => Promise<void>
   deleteDocument: (path: string) => Promise<void>
@@ -105,6 +114,8 @@ let autoNameTimer: ReturnType<typeof setTimeout> | null = null
  */
 let autoNamedPath: string | null = null
 let retryCount = 0
+/** 写入失败时拦下离开操作的时间：DISCARD_CONFIRM_MS 内再来一次就放行 */
+let discardArmedAt = 0
 
 function clearSaveTimer() {
   if (saveTimer) {
@@ -157,7 +168,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   changeLibrary: async () => {
-    await get().flushSave()
+    if (!(await get().prepareToLeave())) return
     let result: { path: string; copied: number; skipped: number } | null
     try {
       result = await invoke<{ path: string; copied: number; skipped: number } | null>(
@@ -208,7 +219,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   createDocument: async (dirPrefix = '') => {
     const { libraryPath } = get()
     if (!libraryPath) return
-    await get().flushSave()
+    if (!(await get().prepareToLeave())) return
     // dirPrefix 来自 list_documents 的结果；Rust 端仍会校验目录在库内
     const folder = dirPrefix.replace(/\/+$/, '')
     try {
@@ -227,7 +238,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
    * 打开文档
    */
   openDocument: async (path: string, revealRange?: [number, number]) => {
-    await get().flushSave()
+    // 已经是当前文档：不重新加载（会丢光标、滚动和撤销历史），只定位
+    if (get().activeDocument?.path === path) {
+      if (revealRange) editorBridge.revealRange(revealRange)
+      return
+    }
+    if (!(await get().prepareToLeave())) return
     try {
       const result = await invoke<ReadDocumentResult>('read_document', { path })
       const fileName = path.split('/').pop() ?? path
@@ -242,7 +258,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         displayTitle: displayNameOf(fileName),
         openSeq: ++openSeqCounter,
       }
-      autoNamedPath = followsFirstLine(fileName, result.content) ? path : null
+      // 只有库里的文档才跟着第一行改名：Finder / ⌘O 打开的外部文件（仓库里的 CHANGELOG.md 之类）
+      // 改个标题就被改名，会弄坏别人的工程
+      const library = get().libraryPath
+      const inLibrary = library !== '' && path.startsWith(`${library.replace(/\/$/, '')}/`)
+      autoNamedPath = inLibrary && followsFirstLine(fileName, result.content) ? path : null
       pendingText = null
       lastWrittenText = result.content
       latestText = result.content
@@ -254,6 +274,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         useUiStore
           .getState()
           .pushToast({ message: t('toast.gbkNotice'), kind: 'info' })
+      } else if (result.encoding !== 'utf-8') {
+        // Big5 / Shift_JIS / UTF-16 …：猜错了的话第一次保存就把原文件写坏，先提醒
+        useUiStore
+          .getState()
+          .pushToast({ message: t('toast.encodingNotice'), kind: 'info' })
       }
 
       if (revealRange) {
@@ -298,13 +323,71 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     return writeChain
   },
 
+  prepareToLeave: async () => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    await Promise.race([
+      get().flushSave(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, LEAVE_FLUSH_TIMEOUT_MS)
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+
+    const state = get().saveState
+    if (state === 'conflict') {
+      // 冲突对话框还开着：必须先选，切走后对话框会作用到别的文档上
+      useUiStore.getState().pushToast({ message: t('toast.leaveConflict'), kind: 'error' })
+      return false
+    }
+    if (pendingText === null && state !== 'error' && state !== 'saving' && state !== 'dirty') {
+      discardArmedAt = 0
+      return true
+    }
+    // 写入失败（目录被移走、磁盘满……）：先拦下；短时间内再来一次才放弃，免得卡死在这篇上
+    if (discardArmedAt > 0 && Date.now() - discardArmedAt < DISCARD_CONFIRM_MS) {
+      discardArmedAt = 0
+      pendingText = null
+      clearRetryTimer()
+      set({ saveState: 'idle' })
+      return true
+    }
+    discardArmedAt = Date.now()
+    useUiStore.getState().pushToast({ message: t('toast.leaveUnsaved'), kind: 'error' })
+    return false
+  },
+
   renameDocument: async (path: string, newName: string, options?: { auto?: boolean }) => {
-    const safeName = ensureMarkdownExtension(sanitizeFileName(newName))
+    const safeName = ensureMarkdownExtension(
+      sanitizeFileName(newName),
+      markdownExtensionOf(path.split('/').pop() ?? path),
+    )
     if (!safeName) return
     // 手动改名：这篇不再跟着第一行自动命名
     if (!options?.auto && autoNamedPath === path) autoNamedPath = null
     try {
-      const newPath = await invoke<string>('rename_document', { path, newName: safeName })
+      // 改名排进写入队列：改名进行中到期的自动保存排在它后面，并且一改完就切到新路径。
+      // 否则那次保存会写回旧路径，把旧文件又建出来
+      const step = writeChain.then(async () => {
+        const renamed = await invoke<string>('rename_document', { path, newName: safeName })
+        const active = get().activeDocument
+        if (active && active.path === path) {
+          const renamedFile = renamed.split('/').pop() ?? safeName
+          set({
+            activeDocument: {
+              ...active,
+              path: renamed,
+              fileName: renamedFile,
+              displayTitle: displayNameOf(renamedFile),
+            },
+          })
+        }
+        return renamed
+      })
+      writeChain = step.then(
+        () => undefined,
+        () => undefined,
+      )
+      const newPath = await step
       if (options?.auto && autoNamedPath === path) autoNamedPath = newPath
       // 重名时 Rust 会自动加 -2（spec §7.2），实际文件名以返回路径为准
       const fileName = newPath.split('/').pop() ?? safeName
@@ -315,17 +398,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         })
       }
       await get().refreshDocuments()
-      const active = get().activeDocument
-      if (active && active.path === path) {
-        set({
-          activeDocument: {
-            ...active,
-            path: newPath,
-            fileName,
-            displayTitle: displayNameOf(fileName),
-          },
-        })
-      }
       // 收藏里存的是路径，rename 后同步，否则收藏会「丢失」
       const settings = useSettingsStore.getState().settings
       if (settings.favorites.includes(path)) {
@@ -441,11 +513,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         return
       }
 
-      const hasPending =
+      const hasPending = () =>
         pendingText !== null ||
         get().saveState === 'dirty' ||
         get().saveState === 'saving' ||
         get().saveState === 'error'
+      const pendingBefore = hasPending()
 
       let disk: ReadDocumentResult
       try {
@@ -453,8 +526,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       } catch {
         return
       }
+      // 读盘期间可能已经切走了，或者又打了字（不能静默覆盖掉）
+      if (get().activeDocument?.path !== event.path) return
 
-      if (hasPending) {
+      if (pendingBefore || hasPending()) {
         // 有 pending 输入 → 冲突三选一
         useEditorStore.getState().setConflict({
           path: event.path,
@@ -560,8 +635,10 @@ async function writeActiveDocument(
     lastWrittenText = content
     retryCount = 0
     clearRetryTimer()
+    // 写盘期间又打了字：还没全部落盘，别显示「已保存」
+    const newerPending = pendingText !== null && pendingText !== content
     useDocumentStore.setState((s) => ({
-      saveState: 'saved',
+      saveState: newerPending ? 'dirty' : 'saved',
       activeDocument:
         s.activeDocument && s.activeDocument.path === active.path
           ? { ...s.activeDocument, mtime: result.mtime }
@@ -575,8 +652,8 @@ async function writeActiveDocument(
   } catch (error) {
     const conflict = isConflictError(error)
     if (conflict) {
-      // 保留内存内容，等待用户选择
-      pendingText = content
+      // 保留内存内容，等待用户选择（写盘期间又打的字更新，不能被这次的旧内容盖掉）
+      pendingText ??= content
       let diskContent = ''
       let diskMtime = conflict.diskMtime
       try {
@@ -595,7 +672,7 @@ async function writeActiveDocument(
       return
     }
 
-    pendingText = content
+    pendingText ??= content
     useDocumentStore.setState({ saveState: 'error' })
     useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
 

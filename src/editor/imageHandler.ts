@@ -24,7 +24,8 @@ function isImage(file: File): boolean {
 function altFromName(name: string): string {
   const base = name.split('/').pop() ?? name
   const dot = base.lastIndexOf('.')
-  return dot > 0 ? base.slice(0, dot) : base
+  // 方括号会提前结束 alt 文本，链接就不成立了
+  return (dot > 0 ? base.slice(0, dot) : base).replace(/[[\]]/g, '')
 }
 
 async function insertImages(
