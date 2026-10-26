@@ -104,6 +104,18 @@ fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
+/// Finder 能用 Ink 打开的几种扩展名（tauri.conf.json 的 fileAssociations）
+fn has_markdown_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .map(|e| {
+            ["md", "markdown", "mdown", "txt"]
+                .iter()
+                .any(|ext| e.eq_ignore_ascii_case(ext))
+        })
+        .unwrap_or(false)
+}
+
 fn is_markdown(name: &str) -> bool {
     Path::new(name)
         .extension()
@@ -318,6 +330,10 @@ pub fn write_new_text_file(path: &Path, content: &str) -> Result<String, Command
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    // 只用来写冲突副本：限定为 Markdown 文档，不能借它在文档旁边写 .zprofile 之类的文件
+    if !is_single_file_name(&file_name) || !has_markdown_extension(&file_name) {
+        return Err(CommandError::new("invalidFileName", file_name));
+    }
     let (stem, ext) = match file_name.rfind('.') {
         Some(idx) if idx > 0 => (file_name[..idx].to_string(), file_name[idx..].to_string()),
         _ => (file_name.clone(), String::new()),
@@ -338,6 +354,10 @@ pub fn write_new_text_file(path: &Path, content: &str) -> Result<String, Command
 
 /// 在目录中创建新文档，取最小未占用序号：`Untitled.md` → `Untitled 2.md`
 pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, CommandError> {
+    // base_name 来自 webview：`../../x` 会把新文档建到库外
+    if !is_single_file_name(base_name) {
+        return Err(CommandError::new("invalidFileName", base_name));
+    }
     fs::create_dir_all(dir).map_err(|e| io_message(dir, &e))?;
 
     let taken: Vec<String> = fs::read_dir(dir)
@@ -364,17 +384,22 @@ pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, Comm
         .ok_or_else(|| CommandError::new("createFailed", path.display().to_string()))
 }
 
+/// 只由一个普通路径分量组成的文件名（不含 `/`、`..`），且不以 `.` 开头（不生成隐藏文件）
+fn is_single_file_name(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) && !name.starts_with('.')
+}
+
 /// 重命名（仅同目录，spec §7.2）：目标名已被占用时自动加 `-2`、`-3`……，返回实际路径
 pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandError> {
     let parent = path
         .parent()
         .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
     // 只接受单个文件名：`../x.md` 或 `a/b.md` 会把文件挪出原目录
-    let mut components = Path::new(new_name).components();
-    if !matches!(
-        (components.next(), components.next()),
-        (Some(std::path::Component::Normal(_)), None)
-    ) {
+    if !is_single_file_name(new_name) {
         return Err(CommandError::new("invalidFileName", new_name));
     }
 
@@ -722,6 +747,17 @@ mod tests {
         assert!(to.join("notes.txt").exists());
         // 旧库不受影响
         assert!(from.join("a.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn webview_supplied_names_stay_single_documents() {
+        let dir = temp_dir("names");
+        assert!(create_document(&dir, "../escape").is_err());
+        assert!(create_document(&dir, ".hidden").is_err());
+        assert!(write_new_text_file(&dir.join(".zprofile"), "x").is_err());
+        assert!(write_new_text_file(&dir.join("run.sh"), "x").is_err());
+        assert!(write_new_text_file(&dir.join("Note (Conflicted Copy).md"), "x").is_ok());
         let _ = fs::remove_dir_all(&dir);
     }
 
