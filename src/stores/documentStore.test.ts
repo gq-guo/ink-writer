@@ -347,6 +347,7 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('改正文里的 H1 不会改文档名，也不会改文件名', async () => {
     mockLibrary('# Old\n')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Note.md')
     documentStore.getState().onEditorChange('# New Title\n')
     await vi.advanceTimersByTimeAsync(1500)
@@ -358,6 +359,7 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('手动改名后显示的就是新文件名', async () => {
     mockLibrary('# Fresh\n')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Note.md')
     await documentStore.getState().renameDocument('/library/Note.md', 'Renamed.md')
 
@@ -367,6 +369,7 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('新文档（Untitled）的文件名跟着第一行走：停笔 1s 后改名，去掉 Markdown 标记', async () => {
     mockLibrary('')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Untitled.md')
     documentStore.getState().onEditorChange('# 我的**文章**\n\n正文')
     await vi.advanceTimersByTimeAsync(900)
@@ -388,6 +391,7 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('手动改过名就不再跟着第一行走', async () => {
     mockLibrary('')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Untitled 2.md')
     await documentStore.getState().renameDocument('/library/Untitled 2.md', '周报')
     documentStore.getState().onEditorChange('# 别的标题\n')
@@ -399,6 +403,7 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('第一行是空的不改名', async () => {
     mockLibrary('')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/Untitled.md')
     documentStore.getState().onEditorChange('\n\n')
     await vi.advanceTimersByTimeAsync(1500)
@@ -408,10 +413,20 @@ describe('文件名就是文档名（H1 不参与命名）', () => {
   it('重新打开时文件名正好等于第一行（上次自动命名的结果）：接着跟随', async () => {
     mockLibrary('# 读书笔记\n')
     const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
     await documentStore.getState().openDocument('/library/读书笔记.md')
     documentStore.getState().onEditorChange('# 读书笔记 2026\n')
     await vi.advanceTimersByTimeAsync(1500)
     expect(renames()).toEqual(['读书笔记 2026.md'])
+  })
+  it('库外的文件（Finder / ⌘O 打开）不跟着第一行改名', async () => {
+    mockLibrary('# CHANGELOG\n')
+    const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/repo/CHANGELOG.md')
+    documentStore.getState().onEditorChange('# CHANGELOG v2\n')
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(renames()).toEqual([])
   })
 })
 

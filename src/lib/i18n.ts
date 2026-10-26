@@ -196,6 +196,7 @@ const zh: Record<string, string> = {
 
   // ── store / 命令里的 Toast ──
   'toast.gbkNotice': '已按 GBK 解码，保存时将转为 UTF-8',
+  'toast.encodingNotice': '这个文件不是 UTF-8，已自动识别编码，保存时将转为 UTF-8。显示乱码的话先别编辑',
   'toast.watchFailed': '无法监听文档库',
   'toast.libraryMissing': '找不到文档库',
   'toast.trashed': '文档已移入废纸篓',
@@ -447,6 +448,7 @@ const en: Record<string, string> = {
   'settings.done': 'Done',
 
   'toast.gbkNotice': 'Decoded as GBK; will be saved as UTF-8',
+  'toast.encodingNotice': 'This file isn\'t UTF-8. Its encoding was detected automatically and it will be saved as UTF-8. If the text looks garbled, don\'t edit it.',
   'toast.watchFailed': 'Cannot watch the library',
   'toast.libraryMissing': 'Library not found',
   'toast.trashed': 'Document moved to Trash',

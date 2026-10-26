@@ -255,7 +255,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         displayTitle: displayNameOf(fileName),
         openSeq: ++openSeqCounter,
       }
-      autoNamedPath = followsFirstLine(fileName, result.content) ? path : null
+      // 只有库里的文档才跟着第一行改名：Finder / ⌘O 打开的外部文件（仓库里的 CHANGELOG.md 之类）
+      // 改个标题就被改名，会弄坏别人的工程
+      const library = get().libraryPath
+      const inLibrary = library !== '' && path.startsWith(`${library.replace(/\/$/, '')}/`)
+      autoNamedPath = inLibrary && followsFirstLine(fileName, result.content) ? path : null
       pendingText = null
       lastWrittenText = result.content
       latestText = result.content
@@ -267,6 +271,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         useUiStore
           .getState()
           .pushToast({ message: t('toast.gbkNotice'), kind: 'info' })
+      } else if (result.encoding !== 'utf-8') {
+        // Big5 / Shift_JIS / UTF-16 …：猜错了的话第一次保存就把原文件写坏，先提醒
+        useUiStore
+          .getState()
+          .pushToast({ message: t('toast.encodingNotice'), kind: 'info' })
       }
 
       if (revealRange) {
