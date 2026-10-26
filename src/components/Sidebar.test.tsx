@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 
 const { invokeMock, menuNewMock, popupMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
@@ -286,6 +286,27 @@ describe('Sidebar（spec W2）', () => {
     expect(useUiStore.getState().sidebarView).toBe('tag')
     expect(screen.getByText('昨天的文档')).toBeInTheDocument()
     expect(screen.queryByText('今天的文档')).toBeNull()
+  })
+
+  it('当前文档保存完后重新统计标签（保存不会刷新文档列表）', async () => {
+    useDocumentStore.setState({ libraryPath: '/library', saveState: 'idle' })
+    invokeMock.mockImplementation(async (command: string) => (command === 'list_tags' ? [] : undefined))
+    render(<Sidebar />)
+    const calls = () => invokeMock.mock.calls.filter((call) => call[0] === 'list_tags').length
+    await vi.waitFor(() => expect(calls()).toBe(1), { timeout: 2000 })
+    act(() => useDocumentStore.setState({ saveState: 'saved' }))
+    await vi.waitFor(() => expect(calls()).toBe(2), { timeout: 2000 })
+  })
+
+  it('换了文档库：旧库的标签不再显示', async () => {
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string, args?: { root?: string }) =>
+      command === 'list_tags' && args?.root === '/library' ? [{ tag: '旧库', count: 1, paths: ['/library/a.md'] }] : [],
+    )
+    render(<Sidebar />)
+    expect(await screen.findByTitle('#旧库', {}, { timeout: 2000 })).toBeInTheDocument()
+    act(() => useDocumentStore.setState({ libraryPath: '/other' }))
+    expect(screen.queryByTitle('#旧库')).toBeNull()
   })
 
   it('看着的标签没了：回到全部', async () => {

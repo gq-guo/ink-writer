@@ -32,8 +32,8 @@ import type { DocumentMeta, TagCount } from '@/lib/types'
 const VIRTUALIZE_THRESHOLD = 500
 /** Recent 视图显示的条数 */
 const RECENT_LIMIT = 10
-/** 文档变化后等这么久再重新统计标签（保存、外部修改会连着触发好几次刷新） */
-const TAGS_REFRESH_DEBOUNCE_MS = 800
+/** 文档变化 / 保存后等这么久再重新统计标签（外部修改会连着触发好几次刷新）；短一点，移动后标签视图少闪 */
+const TAGS_REFRESH_DEBOUNCE_MS = 250
 
 type ListItem =
   | { kind: 'group'; group: DateGroup }
@@ -60,6 +60,8 @@ export function Sidebar() {
   const documents = useDocumentStore((state) => state.documents)
   const folderPrefixes = useDocumentStore((state) => state.folders)
   const libraryPath = useDocumentStore((state) => state.libraryPath)
+  /** 当前文档刚保存完：自己写进去的 #标签 也要统计（保存不会刷新文档列表） */
+  const justSaved = useDocumentStore((state) => state.saveState === 'saved')
   const createFolder = useDocumentStore((state) => state.createFolder)
   const moveDocument = useDocumentStore((state) => state.moveDocument)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
@@ -73,8 +75,10 @@ export function Sidebar() {
 
   const t = useT()
   const [navOpen, setNavOpen] = useState(true)
-  /** 全库标签；null = 还没读到（这时不判断「看着的标签没了」） */
-  const [tags, setTags] = useState<TagCount[] | null>(null)
+  /** 全库标签，连同它属于哪个文档库：换库后旧库的标签不算数 */
+  const [tagsState, setTagsState] = useState<{ root: string; tags: TagCount[] } | null>(null)
+  /** null = 当前库的标签还没读到（这时不判断「看着的标签没了」） */
+  const tags = tagsState?.root === libraryPath ? tagsState.tags : null
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   /** 右键菜单开着时针对的条目（画一圈细框，看得出菜单作用在哪一篇上） */
   const [contextPath, setContextPath] = useState<string | null>(null)
@@ -93,24 +97,23 @@ export function Sidebar() {
 
   const folders = useMemo(() => listFolders(documents, folderPrefixes), [documents, folderPrefixes])
 
-  // 标签要读全文：文档列表变了（保存、新建、外部修改）之后防抖再统计一次，在后台线程扫
+  // 标签要读全文：文档列表变了（新建、移动、外部修改）或当前文档刚保存完之后，防抖再统计一次，在后台线程扫
   useEffect(() => {
     if (!libraryPath) return
     let cancelled = false
     const timer = setTimeout(() => {
+      const done = (list: TagCount[]) => {
+        if (!cancelled) setTagsState({ root: libraryPath, tags: list })
+      }
       void invoke<TagCount[]>('list_tags', { root: libraryPath })
-        .then((list) => {
-          if (!cancelled) setTags(list ?? [])
-        })
-        .catch(() => {
-          if (!cancelled) setTags([])
-        })
+        .then((list) => done(list ?? []))
+        .catch(() => done([]))
     }, TAGS_REFRESH_DEBOUNCE_MS)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [documents, libraryPath])
+  }, [documents, libraryPath, justSaved])
 
   const activeTag = useMemo(
     () => tags?.find((tag) => tag.tag.toLowerCase() === sidebarTag.toLowerCase()) ?? null,
@@ -477,7 +480,8 @@ function ContextMenu({ state, onClose }: ContextMenuProps) {
       onMouseDown={(event) => event.stopPropagation()}
     >
       {state.entries.map((entry, index) => (
-        <MenuEntry key={entry === 'separator' ? `sep-${index}` : entry.label} entry={entry} onClose={onClose} />
+        // 用序号做 key：「移到」里文件夹可能和别的条目同名
+        <MenuEntry key={index} entry={entry} onClose={onClose} />
       ))}
     </div>
   )
@@ -491,7 +495,7 @@ function MenuEntry({ entry, onClose, indent = false }: { entry: ContextMenuEntry
       <div role="group" aria-label={entry.label}>
         <div className="ink-menu-label">{entry.label}</div>
         {entry.children.map((child, index) => (
-          <MenuEntry key={child === 'separator' ? `sep-${index}` : child.label} entry={child} onClose={onClose} indent />
+          <MenuEntry key={index} entry={child} onClose={onClose} indent />
         ))}
       </div>
     )

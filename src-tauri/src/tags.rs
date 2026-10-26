@@ -227,7 +227,7 @@ pub fn search_tags(root: &Path, query: &str) -> Result<Vec<TagHit>, CommandError
     Ok(hits)
 }
 
-/// 全库的标签与出现次数（大小写不同算同一个，显示最近修改的那篇里的写法），按次数倒序
+/// 全库的标签与出现次数（大小写不同算同一个，显示最近修改的那篇里的写法），按用到它的文档数倒序
 pub fn list_tags(root: &Path) -> Result<Vec<TagCount>, CommandError> {
     let mut counts: HashMap<String, TagCount> = HashMap::new();
     for doc in fs_ops::list_documents(root)? {
@@ -250,9 +250,12 @@ pub fn list_tags(root: &Path) -> Result<Vec<TagCount>, CommandError> {
         });
     }
     let mut list: Vec<TagCount> = counts.into_values().collect();
+    // 按用到它的文档数排（侧栏显示的就是文档数），再按出现次数、名字
     list.sort_by(|a, b| {
-        b.count
-            .cmp(&a.count)
+        b.paths
+            .len()
+            .cmp(&a.paths.len())
+            .then_with(|| b.count.cmp(&a.count))
             .then_with(|| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()))
     });
     Ok(list)
