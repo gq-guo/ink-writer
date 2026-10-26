@@ -74,7 +74,9 @@
   --secondary: #929087;
   --border: #dedcd5;
   --accent: #6e756d;
-  --selection: #e8e5dd;
+  /* 朱砂：全应用唯一的彩色，只给光标和选区 —— 写字时看到的「墨」 */
+  --caret: #c23b22;
+  --selection: #f0d7d0;
   --highlight: #ece3c3;
   --highlight-strong: #e0d08f;
   --surface: #fcfbf8;
@@ -145,7 +147,8 @@
   --secondary: #8e8b82;
   --border: #2f2d29;
   --accent: #a3aa9f;
-  --selection: #3a3833;
+  --caret: #e5674e;
+  --selection: #58312a;
   --highlight: #4a4430;
   --highlight-strong: #6a5f3a;
   --surface: #23221f;
@@ -251,7 +254,7 @@ input {
   margin: 0 auto;
   /* ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%） */
   padding: 16px 24px calc(50vh + 32px) 24px;
-  caret-color: var(--accent);
+  caret-color: var(--caret);
   min-height: 100%;
 }
 
@@ -283,9 +286,12 @@ input {
   background: var(--selection);
 }
 
-.cm-cursor,
+.cm-cursor {
+  border-left: 2px solid var(--caret);
+}
+
 .cm-dropCursor {
-  border-left: 2px solid var(--foreground);
+  border-left: 2px solid var(--secondary);
 }
 
 /* 光标闪烁用 CM6 自带的（spec §17.4：系统默认，不自定义）：
@@ -640,7 +646,7 @@ html .cm-editor .cm-search.cm-panel button[name='close']:hover {
 }
 
 html .cm-editor .cm-content {
-  caret-color: var(--accent);
+  caret-color: var(--caret);
 }
 
 html .cm-editor .cm-searchMatch {
