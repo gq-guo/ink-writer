@@ -110,6 +110,7 @@ describe('Sidebar（spec W2）', () => {
     expect([...menu.children].map((child) => child.getAttribute('role') ?? '')).toEqual([
       'menuitem',
       'menuitem',
+      'group',
       'menuitem',
       'separator',
       'menuitem',
@@ -129,16 +130,21 @@ describe('Sidebar（spec W2）', () => {
       render(<Sidebar />)
       fireEvent.contextMenu(screen.getByText('今天的文档'))
       await vi.waitFor(() => expect(popupMock).toHaveBeenCalled())
-      const items = menuNewMock.mock.calls[0]![0].items as ({ text: string; action: () => void } | { item: string })[]
+      type NativeItem = { text: string; action?: () => void; items?: NativeItem[] } | { item: string }
+      const items = menuNewMock.mock.calls[0]![0].items as NativeItem[]
       expect(items.map((item) => ('text' in item ? item.text : item.item))).toEqual([
         '加入收藏',
         '重命名…',
+        '移到',
         '在访达中显示',
         'Separator',
         '移到废纸篓',
       ])
+      // 「移到」是二级菜单：列出别的文件夹（文档已经在库根目录，不再列出根目录）
+      const moveTo = items[2] as { items: { text: string }[] }
+      expect(moveTo.items.map((item) => item.text)).toEqual(['sub'])
       expect(screen.queryByRole('menu')).toBeNull()
-      ;(items[2] as { action: () => void }).action()
+      ;(items[3] as { action: () => void }).action()
       expect(invokeMock).toHaveBeenCalledWith('reveal_in_finder', { path: '/library/a.md' })
     } finally {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
@@ -208,10 +214,86 @@ describe('Sidebar（spec W2）', () => {
     expect(useUiStore.getState().sidebarView).toBe('all')
   })
 
-  it('没有子文件夹时不显示「文件夹」', () => {
-    useDocumentStore.setState({ documents: documents.filter((document) => document.dirPrefix === '') })
+  it('没有子文件夹时也有「文件夹」标题和新建按钮，可以建第一个', () => {
+    useDocumentStore.setState({ documents: documents.filter((document) => document.dirPrefix === ''), folders: [] })
     render(<Sidebar />)
-    expect(screen.queryByText('文件夹')).toBeNull()
+    expect(screen.getByText('文件夹')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新建文件夹' })).toBeInTheDocument()
+  })
+
+  it('点 + 新建文件夹：输入名字回车后建在库根目录，并切到这个文件夹', async () => {
+    useUiStore.setState({ sidebarView: 'all', sidebarFolder: '' })
+    useDocumentStore.setState({ libraryPath: '/library', folders: [] })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'list_documents') return documents
+      if (command === 'list_folders') return ['Drafts/', 'sub/']
+      return undefined
+    })
+    render(<Sidebar />)
+    fireEvent.click(screen.getByRole('button', { name: '新建文件夹' }))
+    const input = screen.getByPlaceholderText('文件夹名称')
+    fireEvent.change(input, { target: { value: 'Drafts' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await vi.waitFor(() => expect(useUiStore.getState().sidebarFolder).toBe('Drafts/'))
+    expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library', name: 'Drafts' })
+    expect(invokeMock.mock.calls.filter((call) => call[0] === 'create_folder')).toHaveLength(1)
+    // 空文件夹也列出来（来自 list_folders），数量 0
+    expect(screen.getByTitle('Drafts/').querySelector('.ink-nav-count')?.textContent).toBe('0')
+  })
+
+  it('正看着某个文件夹时，新建的文件夹建在它里面', async () => {
+    useUiStore.setState({ sidebarView: 'folder', sidebarFolder: 'sub/' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockResolvedValue([])
+    render(<Sidebar />)
+    fireEvent.click(screen.getByRole('button', { name: '新建文件夹' }))
+    const input = screen.getByPlaceholderText('文件夹名称')
+    fireEvent.change(input, { target: { value: '草稿' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library/sub', name: '草稿' }),
+    )
+  })
+
+  it('右键「移到」把文档移到别的文件夹', async () => {
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'move_document') return '/library/sub/a.md'
+      if (command === 'list_documents') return documents
+      if (command === 'list_folders') return ['sub/']
+      return undefined
+    })
+    render(<Sidebar />)
+    fireEvent.contextMenu(screen.getByText('今天的文档'))
+    const group = await screen.findByRole('group', { name: '移到' })
+    fireEvent.click(group.querySelector('[role="menuitem"]')!)
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('move_document', { path: '/library/a.md', targetDir: '/library/sub' }),
+    )
+  })
+
+  it('有标签时显示「标签」：数量是文档数，点一个只看用到它的文档', async () => {
+    useUiStore.setState({ sidebarView: 'all', sidebarTag: '' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'list_tags') return [{ tag: '野餐', count: 3, paths: ['/library/b.md'] }]
+      return []
+    })
+    render(<Sidebar />)
+    const tag = await screen.findByTitle('#野餐', {}, { timeout: 2000 })
+    expect(tag.querySelector('.ink-nav-count')?.textContent).toBe('1')
+    fireEvent.click(tag)
+    expect(useUiStore.getState().sidebarView).toBe('tag')
+    expect(screen.getByText('昨天的文档')).toBeInTheDocument()
+    expect(screen.queryByText('今天的文档')).toBeNull()
+  })
+
+  it('看着的标签没了：回到全部', async () => {
+    useUiStore.setState({ sidebarView: 'tag', sidebarTag: 'gone' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string) => (command === 'list_tags' ? [] : undefined))
+    render(<Sidebar />)
+    await vi.waitFor(() => expect(useUiStore.getState().sidebarView).toBe('all'), { timeout: 2000 })
   })
 
   it('Sidebar 隐藏时不占空间', () => {

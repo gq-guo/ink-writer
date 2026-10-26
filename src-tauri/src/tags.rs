@@ -49,6 +49,8 @@ pub struct TagHit {
 pub struct TagCount {
     pub tag: String,
     pub count: usize,
+    /// 用到这个标签的文档（绝对路径，按文档 mtime 倒序，不重复）
+    pub paths: Vec<String>,
 }
 
 /// 一行里的一个标签：`#` 与标签末尾的字节位置（行内），标签原文（不含 #）
@@ -233,13 +235,17 @@ pub fn list_tags(root: &Path) -> Result<Vec<TagCount>, CommandError> {
             continue;
         };
         for_each_tag(&text, |site| {
-            counts
+            let entry = counts
                 .entry(site.tag.tag.to_lowercase())
                 .or_insert(TagCount {
                     tag: site.tag.tag,
                     count: 0,
-                })
-                .count += 1;
+                    paths: Vec::new(),
+                });
+            entry.count += 1;
+            if entry.paths.last() != Some(&doc.path) {
+                entry.paths.push(doc.path.clone());
+            }
             true
         });
     }
@@ -389,6 +395,25 @@ mod tests {
                 ("读书".to_string(), 1)
             ]
         );
+        // 每个标签带上用到它的文档：同一篇里出现多次只算一篇
+        let work = list_tags(&root)
+            .unwrap()
+            .into_iter()
+            .find(|t| t.tag.eq_ignore_ascii_case("work"))
+            .unwrap();
+        let mut names: Vec<String> = work
+            .paths
+            .iter()
+            .map(|p| {
+                Path::new(p)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["a.md", "b.md"]);
         let _ = fs::remove_dir_all(&root);
     }
 }

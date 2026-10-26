@@ -62,6 +62,55 @@ describe('rename 的元数据隔离', () => {
   })
 })
 
+describe('把文档移到别的文件夹', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    vi.useFakeTimers()
+  })
+
+  it('移动正在编辑的文档：活动文档换到新路径（编辑器不重建），收藏跟着改', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'hello', encoding: 'utf-8', mtime: 1000, size: 5, lineEnding: 'lf' }
+        case 'move_document':
+          return '/library/Work/Note-2.md'
+        case 'list_documents':
+        case 'list_folders':
+          return []
+        default:
+          return undefined
+      }
+    })
+    const { documentStore } = await loadStores()
+    const { useSettingsStore } = await import('@/stores/settingsStore')
+    useSettingsStore.setState((state) => ({ settings: { ...state.settings, favorites: ['/library/Note.md'] } }))
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Note.md')
+    const before = documentStore.getState().activeDocument!
+
+    await documentStore.getState().moveDocument('/library/Note.md', 'Work/')
+
+    expect(invokeMock).toHaveBeenCalledWith('move_document', { path: '/library/Note.md', targetDir: '/library/Work' })
+    const after = documentStore.getState().activeDocument!
+    expect(after.path).toBe('/library/Work/Note-2.md')
+    expect(after.fileName).toBe('Note-2.md')
+    expect(after.openSeq).toBe(before.openSeq)
+    expect(useSettingsStore.getState().settings.favorites).toEqual(['/library/Work/Note-2.md'])
+  })
+
+  it('新建文件夹：父目录拼成库内路径，返回新文件夹的 dirPrefix', async () => {
+    invokeMock.mockImplementation(async (command: string) =>
+      command === 'list_documents' || command === 'list_folders' ? [] : '/library/Work/Drafts',
+    )
+    const { documentStore } = await loadStores()
+    documentStore.setState({ libraryPath: '/library' })
+    const prefix = await documentStore.getState().createFolder(' Drafts ', 'Work/')
+    expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library/Work', name: 'Drafts' })
+    expect(prefix).toBe('Work/Drafts/')
+  })
+})
+
 describe('删除活动文档', () => {
   beforeEach(() => {
     invokeMock.mockReset()

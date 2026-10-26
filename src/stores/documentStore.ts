@@ -51,6 +51,8 @@ export interface FsEventPayload {
 
 interface DocumentState {
   documents: DocumentMeta[]
+  /** 库里的文件夹（dirPrefix 格式，含刚建的空文件夹；不含只放图片的 assets/ 之类） */
+  folders: string[]
   activeDocument: Document | null
   saveState: SaveState
   libraryPath: string
@@ -62,6 +64,10 @@ interface DocumentState {
   refreshDocuments: () => Promise<void>
   /** dirPrefix：相对库根目录的文件夹（如 "Project/"），默认库根目录 */
   createDocument: (dirPrefix?: string) => Promise<void>
+  /** 在 parentPrefix（默认库根目录）下新建文件夹；成功返回新文件夹的 dirPrefix */
+  createFolder: (name: string, parentPrefix?: string) => Promise<string | null>
+  /** 把文档移到另一个文件夹（targetPrefix 为 "" 表示库根目录）；文档引用的相对路径图片一并复制 */
+  moveDocument: (path: string, targetPrefix: string) => Promise<void>
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
   onEditorChange: (text: string) => void
   flushSave: () => Promise<void>
@@ -144,6 +150,7 @@ function isConflictError(error: unknown): { diskMtime: number } | null {
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   documents: [],
+  folders: [],
   activeDocument: null,
   saveState: 'idle',
   libraryPath: '',
@@ -206,8 +213,11 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const { libraryPath } = get()
     if (!libraryPath) return
     try {
-      const documents = await invoke<DocumentMeta[]>('list_documents', { root: libraryPath })
-      set({ documents })
+      const [documents, folders] = await Promise.all([
+        invoke<DocumentMeta[]>('list_documents', { root: libraryPath }),
+        invoke<string[]>('list_folders', { root: libraryPath }),
+      ])
+      set({ documents, folders: folders ?? [] })
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
     }
@@ -405,6 +415,67 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
           favorites: settings.favorites.map((item) => (item === path ? newPath : item)),
         })
       }
+    } catch (error) {
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+    }
+  },
+
+  createFolder: async (name: string, parentPrefix = '') => {
+    const { libraryPath } = get()
+    const folderName = name.trim()
+    if (!libraryPath || !folderName) return null
+    const parent = parentPrefix.replace(/\/+$/, '')
+    try {
+      // 名字的合法性（不含 /、..、不以 . 开头）由 Rust 校验，父目录也必须在库内
+      await invoke<string>('create_folder', {
+        parent: parent ? `${libraryPath}/${parent}` : libraryPath,
+        name: folderName,
+      })
+      await get().refreshDocuments()
+      return `${parent ? `${parent}/` : ''}${folderName}/`
+    } catch (error) {
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+      return null
+    }
+  },
+
+  moveDocument: async (path: string, targetPrefix: string) => {
+    const { libraryPath } = get()
+    if (!libraryPath) return
+    const folder = targetPrefix.replace(/\/+$/, '')
+    const targetDir = folder ? `${libraryPath}/${folder}` : libraryPath
+    try {
+      // 和改名一样排进写入队列：移动途中到期的自动保存排在后面，并且一移完就写到新路径
+      const step = writeChain.then(async () => {
+        const moved = await invoke<string>('move_document', { path, targetDir })
+        const active = get().activeDocument
+        if (active && active.path === path) {
+          // 目标文件夹里重名时 Rust 会加 -2，文件名以返回路径为准
+          const movedFile = moved.split('/').pop() ?? active.fileName
+          set({
+            activeDocument: { ...active, path: moved, fileName: movedFile, displayTitle: displayNameOf(movedFile) },
+          })
+        }
+        return moved
+      })
+      writeChain = step.then(
+        () => undefined,
+        () => undefined,
+      )
+      const newPath = await step
+      if (autoNamedPath === path) autoNamedPath = newPath
+      await get().refreshDocuments()
+      // 收藏里存的是路径，移动后同步
+      const settings = useSettingsStore.getState().settings
+      if (settings.favorites.includes(path)) {
+        useSettingsStore.getState().update({
+          favorites: settings.favorites.map((item) => (item === path ? newPath : item)),
+        })
+      }
+      useUiStore.getState().pushToast({
+        message: t('toast.movedTo', { folder: folder || t('sidebar.libraryRoot') }),
+        kind: 'success',
+      })
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
     }
