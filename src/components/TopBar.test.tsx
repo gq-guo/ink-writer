@@ -19,8 +19,9 @@ const DOC = {
   size: 10,
   content: '',
   originalEncoding: 'utf-8' as const,
-  displayTitle: 'Untitled',
-  titleFromH1: false,
+  // 首行 H1 与文件名不同，顶栏才显示文件名（同名属于重复信息，见下方用例）
+  displayTitle: 'My Draft',
+  titleFromH1: true,
   openSeq: 1,
 }
 
@@ -28,7 +29,27 @@ describe('TopBar 文件名内联重命名', () => {
   beforeEach(() => {
     syncLocale('zh-CN')
     useDocumentStore.setState({ activeDocument: DOC, saveState: 'idle' })
-    useUiStore.setState({ renameSignal: 0 })
+    useUiStore.setState({ renameSignal: 0, sidebarVisible: true })
+  })
+
+  it('文件名与正文可见的标题同名时不显示', () => {
+    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled' } })
+    render(<TopBar />)
+    expect(screen.queryByText('Untitled.md')).not.toBeInTheDocument()
+  })
+
+  it('无 H1 且侧栏收起（文档头不显示）时，同名也保留文件名', () => {
+    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled', titleFromH1: false } })
+    useUiStore.setState({ sidebarVisible: false })
+    render(<TopBar />)
+    expect(screen.getByText('Untitled.md')).toBeInTheDocument()
+  })
+
+  it('同名被隐藏时，命令触发的重命名仍能进入编辑态', async () => {
+    useDocumentStore.setState({ activeDocument: { ...DOC, displayTitle: 'Untitled' } })
+    render(<TopBar />)
+    act(() => useUiStore.getState().requestRename())
+    expect(await screen.findByDisplayValue('Untitled')).toBeInTheDocument()
   })
 
   it('点击文件名进入编辑态（不用 window.prompt）', () => {

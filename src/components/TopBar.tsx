@@ -1,7 +1,7 @@
 /**
  * 顶栏
  *
- * 左：文档图标 + 文件名（点击就地内联编辑，Finder 风格）
+ * 左：文件名（点击就地内联编辑，Finder 风格）；和正文里看得到的标题同名时不显示，避免重复
  * 中：打字机模式胶囊；右：搜索 / 排版 / 更多
  *
  * 文件名与右侧工具默认隐藏，鼠标移到窗口顶部才慢慢浮现（⌘K 覆盖绝大多数操作）；
@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { useDocumentStore } from '@/stores/documentStore'
+import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
@@ -32,9 +33,12 @@ export function TopBar() {
   const [revealed, setRevealed] = useState(false)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const renameDocument = useDocumentStore((state) => state.renameDocument)
+  // 不再用于模式胶囊，但文件名去重要判断 Focus Mode 下文档头是否显示
+  const focusMode = useEditorStore((state) => state.focusMode)
   const typewriterMode = useSettingsStore((state) => state.settings.typewriterMode)
   const showQuickOpen = useUiStore((state) => state.showQuickOpen)
   const renameSignal = useUiStore((state) => state.renameSignal)
+  const sidebarVisible = useUiStore((state) => state.sidebarVisible)
 
   const [typographyOpen, setTypographyOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -110,11 +114,15 @@ export function TopBar() {
   }, [])
 
   const fileName = activeDocument?.fileName ?? ''
+  // 正文里能看到标题时（首行 H1，或文档头的文件名大标题，后者与 EditorHost 的显示条件一致），
+  // 文件名和它同名就是重复信息；重命名仍可走侧栏双击 / 更多菜单 / 命令面板
+  const titleVisible = !!activeDocument && (activeDocument.titleFromH1 || (sidebarVisible && !focusMode))
+  const duplicatesTitle =
+    titleVisible && fileName.replace(/\.(md|markdown|mdown|txt)$/i, '') === activeDocument?.displayTitle
 
   return (
     <div className="ink-topbar" data-revealed={revealed || pinned}>
       <div className="ink-topbar-left">
-        <span className="ink-icon ink-icon-file" aria-hidden />
         {editing ? (
           <input
             ref={nameInputRef}
@@ -133,7 +141,7 @@ export function TopBar() {
               }
             }}
           />
-        ) : fileName ? (
+        ) : fileName && !duplicatesTitle ? (
           <button
             className="ink-topbar-name"
             title={`${activeDocument?.path ?? ''} — ${t('topbar.rename')}`}

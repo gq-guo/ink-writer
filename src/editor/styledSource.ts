@@ -137,6 +137,18 @@ export function buildDecorations(
     builder.marks.push(Decoration.mark({ class: cls }).range(from, to))
   }
 
+  /**
+   * 外悬标记的定宽盒：「- 」「## 」这类标记的实际字宽和 Nch 对不上（- 和空格都比 0 窄），
+   * 只靠 text-indent:-Nch 会让后面的文字偏离左边缘；把标记连同空格放进正好 Nch 宽的盒子，
+   * 文字就精确落在 text-indent 抵消之后的位置
+   */
+  const addHangBox = (from: number, to: number, widthCh: number) => {
+    if (to <= from) return
+    builder.marks.push(
+      Decoration.mark({ class: 'cm-md-hang', attributes: { style: `width:${widthCh}ch` } }).range(from, to),
+    )
+  }
+
   const addLineClass = (lineNumber: number, cls: string) => {
     if (lineNumber < 1 || lineNumber > state.doc.lines) return
     let set = builder.lines.get(lineNumber)
@@ -231,6 +243,25 @@ export function buildDecorations(
             // 内容区间 = 首个标记之后 ~ 末尾标记之前
             const content = contentBetweenMarkers(node)
             if (content) addMark(content.from, content.to, 'cm-md-heading-text')
+            // ATX 标题的「# 」可见时（光标所在行，或关闭了隐藏标记）外悬到左边距：
+            // 标题文字始终落在正文左边缘，光标进出这一行时不会左右跳
+            const openMark = children[0]
+            const headingLine = state.doc.lineAt(node.from)
+            const marksVisible = !activeLines || activeLines.has(headingLine.number)
+            if (
+              name.startsWith('ATX') &&
+              marksVisible &&
+              openMark?.name === 'HeaderMark' &&
+              openMark.from === headingLine.from &&
+              !builder.lineStyles.has(headingLine.number)
+            ) {
+              let end = openMark.to
+              while (end < headingLine.to && /\s/.test(state.doc.sliceString(end, end + 1))) end++
+              if (end > openMark.to) {
+                builder.lineStyles.set(headingLine.number, `text-indent:-${end - headingLine.from}ch`)
+                addHangBox(headingLine.from, end, end - headingLine.from)
+              }
+            }
             break
           }
           case 'HeaderMark':
@@ -274,7 +305,8 @@ export function buildDecorations(
           case 'ListItem': {
             // 嵌套靠源码里的前导空格表达：衬线体的空格很窄，两个空格几乎看不出层级，
             // 所以把前导空格加宽（cm-md-list-lead），每个约 0.6em；
-            // 悬挂缩进：折行后的文字与列表标记后的文字对齐
+            // 标记外悬：「- 」「1. 」挂到左边距里，列表文字与正文段落同一条左边缘；
+            // 折行后的文字仍与列表文字对齐（padding-left 只算前导空格，不算标记）
             const mark = children.find((c) => c.name === 'ListMark')
             if (mark) {
               const line = state.doc.lineAt(node.from)
@@ -291,14 +323,16 @@ export function buildDecorations(
                 addMark(line.from + run.index, line.from + run.index + run[0].length, 'cm-md-list-lead')
               }
               const markWidth = state.doc.sliceString(mark.from, mark.to).length + 1
-              const hang = `${(spaces * LIST_LEAD_SPACE_EM).toFixed(2)}em + ${others + markWidth}ch`
+              const lead = `${(spaces * LIST_LEAD_SPACE_EM).toFixed(2)}em + ${others}ch`
+              const hang = `${lead} + ${markWidth}ch`
               // 引用里的列表：行内 style 会盖掉 .cm-md-quote 的左内边距，这里补回来
               const quote = hasAncestor(node, 'Blockquote') ? `${QUOTE_PADDING_PX}px + ` : ''
               builder.lineStyles.set(
                 line.number,
-                `padding-left:calc(${quote}${hang});text-indent:calc(-1 * (${hang}))`,
+                `padding-left:calc(${quote}${lead});text-indent:calc(-1 * (${hang}))`,
               )
               addMark(mark.from, mark.to, 'cm-md-mark')
+              if (state.doc.sliceString(mark.to, mark.to + 1) === ' ') addHangBox(mark.from, mark.to + 1, markWidth)
             }
             break
           }
