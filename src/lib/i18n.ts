@@ -213,6 +213,11 @@ const zh: Record<string, string> = {
   'update.title': '发现新版本 {version}',
   'update.later': '稍后',
   'update.install': '立即安装并重启',
+  'update.downloading': '正在下载…',
+  'update.downloadingPercent': '正在下载… {percent}%',
+  'update.installing': '正在安装…',
+  'update.failed': '更新失败。可以重试，或到 GitHub Releases 手动下载',
+  'update.retry': '重试',
   'save.saving': '保存中…',
   'save.saved': '已保存',
 
@@ -461,6 +466,11 @@ const en: Record<string, string> = {
   'update.title': 'New version {version} is available',
   'update.later': 'Later',
   'update.install': 'Install & Restart',
+  'update.downloading': 'Downloading…',
+  'update.downloadingPercent': 'Downloading… {percent}%',
+  'update.installing': 'Installing…',
+  'update.failed': 'Update failed. Try again, or download it from GitHub Releases.',
+  'update.retry': 'Retry',
   'save.saving': 'Saving…',
   'save.saved': 'Saved',
 
