@@ -7,11 +7,13 @@
  * - 分组：Today / Yesterday / Last 7 days / Earlier，小号淡色，不做全大写
  * - 条目：单行，标题 + 收藏星标 + 右对齐的短时间；不加文档图标
  * - 底部：+ New Document
+ * - 右键：App 里是 macOS 原生菜单；浏览器 / 测试里退回页面内菜单。菜单开着时被右键的条目带一圈细框（同 Finder）
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
+import { showNativeContextMenu, type ContextMenuEntry } from '@/lib/contextMenu'
 import { GROUP_ORDER, groupFor, listTime, type DateGroup } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
@@ -33,7 +35,7 @@ type ListItem =
 interface ContextMenuState {
   x: number
   y: number
-  document: DocumentMeta
+  entries: ContextMenuEntry[]
 }
 
 
@@ -57,6 +59,8 @@ export function Sidebar() {
   const t = useT()
   const [navOpen, setNavOpen] = useState(true)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  /** 右键菜单开着时针对的条目（画一圈细框，看得出菜单作用在哪一篇上） */
+  const [contextPath, setContextPath] = useState<string | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement | null>(null)
@@ -137,6 +141,52 @@ export function Sidebar() {
     [renameDocument, renameValue],
   )
 
+  const contextEntries = useCallback(
+    (document: DocumentMeta): ContextMenuEntry[] => {
+      const isFavorite = favorites.includes(document.path)
+      // 没有「打开」：单击条目就已经打开了（Finder 需要它是因为单击只是选中）
+      return [
+        {
+          label: t(isFavorite ? 'sidebar.context.removeFavorite' : 'sidebar.context.addFavorite'),
+          action: () =>
+            updateSettings({
+              favorites: isFavorite
+                ? favorites.filter((item) => item !== document.path)
+                : [...favorites, document.path],
+            }),
+        },
+        {
+          label: t('sidebar.context.rename'),
+          action: () => {
+            setRenamingPath(document.path)
+            setRenameValue(document.fileName.replace(/\.(md|markdown|mdown|txt)$/i, ''))
+          },
+        },
+        {
+          label: t('sidebar.context.reveal'),
+          action: () => void invoke('reveal_in_finder', { path: document.path }),
+        },
+        'separator',
+        { label: t('sidebar.context.trash'), action: () => void deleteDocument(document.path), danger: true },
+      ]
+    },
+    [deleteDocument, favorites, t, updateSettings],
+  )
+
+  const openContextMenu = useCallback(
+    (event: React.MouseEvent, document: DocumentMeta) => {
+      event.preventDefault()
+      const entries = contextEntries(document)
+      const { clientX: x, clientY: y } = event
+      setContextPath(document.path)
+      void showNativeContextMenu(entries).then((shown) => {
+        if (shown) setContextPath(null)
+        else setContextMenu({ x, y, entries })
+      })
+    },
+    [contextEntries],
+  )
+
   const renderItem = useCallback(
     (item: ListItem) => {
       if (item.kind === 'group') {
@@ -150,6 +200,7 @@ export function Sidebar() {
         <div
           className="ink-doc-item"
           data-active={isActive}
+          data-context={contextPath === document.path || undefined}
           title={`${document.dirPrefix}${document.fileName}`}
           onClick={() => {
             if (!isRenaming) void openDocument(document.path)
@@ -158,10 +209,7 @@ export function Sidebar() {
             setRenamingPath(document.path)
             setRenameValue(document.fileName.replace(/\.(md|markdown|mdown|txt)$/i, ''))
           }}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            setContextMenu({ x: event.clientX, y: event.clientY, document })
-          }}
+          onContextMenu={(event) => openContextMenu(event, document)}
         >
           {isRenaming ? (
             <input
@@ -188,7 +236,18 @@ export function Sidebar() {
         </div>
       )
     },
-    [activeDocument?.path, commitRename, favorites, openDocument, renameValue, renamingPath, t, view],
+    [
+      activeDocument?.path,
+      commitRename,
+      contextPath,
+      favorites,
+      openContextMenu,
+      openDocument,
+      renameValue,
+      renamingPath,
+      t,
+      view,
+    ],
   )
 
   const hidden = !visible || focusMode
@@ -270,33 +329,9 @@ export function Sidebar() {
       {contextMenu ? (
         <ContextMenu
           state={contextMenu}
-          isFavorite={favorites.includes(contextMenu.document.path)}
-          onClose={() => setContextMenu(null)}
-          onOpen={() => {
-            void openDocument(contextMenu.document.path)
+          onClose={() => {
             setContextMenu(null)
-          }}
-          onRename={() => {
-            setRenamingPath(contextMenu.document.path)
-            setRenameValue(contextMenu.document.fileName.replace(/\.(md|markdown|mdown|txt)$/i, ''))
-            setContextMenu(null)
-          }}
-          onReveal={() => {
-            void invoke('reveal_in_finder', { path: contextMenu.document.path })
-            setContextMenu(null)
-          }}
-          onFavorite={() => {
-            const path = contextMenu.document.path
-            updateSettings({
-              favorites: favorites.includes(path)
-                ? favorites.filter((item) => item !== path)
-                : [...favorites, path],
-            })
-            setContextMenu(null)
-          }}
-          onDelete={() => {
-            void deleteDocument(contextMenu.document.path)
-            setContextMenu(null)
+            setContextPath(null)
           }}
         />
       ) : null}
@@ -306,26 +341,17 @@ export function Sidebar() {
 
 interface ContextMenuProps {
   state: ContextMenuState
-  isFavorite: boolean
   onClose: () => void
-  onOpen: () => void
-  onRename: () => void
-  onReveal: () => void
-  onFavorite: () => void
-  onDelete: () => void
 }
 
-function ContextMenu({
-  state,
-  isFavorite,
-  onClose,
-  onOpen,
-  onRename,
-  onReveal,
-  onFavorite,
-  onDelete,
-}: ContextMenuProps) {
-  const t = useT()
+/** 菜单离窗口边缘至少留这么多 */
+const MENU_EDGE_GAP = 8
+
+/** 页面内右键菜单（浏览器 / 测试里用；App 里走原生菜单） */
+function ContextMenu({ state, onClose }: ContextMenuProps) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [position, setPosition] = useState({ left: state.x, top: state.y })
+
   useEffect(() => {
     const close = () => onClose()
     window.addEventListener('mousedown', close)
@@ -336,35 +362,43 @@ function ContextMenu({
     }
   }, [onClose])
 
-  const items: { label: string; action: () => void; icon?: string; danger?: boolean }[] = [
-    { label: t('sidebar.context.open'), action: onOpen, icon: 'ink-icon-file' },
-    {
-      label: t(isFavorite ? 'sidebar.context.removeFavorite' : 'sidebar.context.addFavorite'),
-      action: onFavorite,
-      icon: 'ink-icon-star',
-    },
-    { label: t('sidebar.context.rename'), action: onRename, icon: 'ink-icon-file' },
-    { label: t('sidebar.context.reveal'), action: onReveal, icon: 'ink-icon-folder' },
-    { label: t('sidebar.context.trash'), action: onDelete, danger: true },
-  ]
+  // 量出菜单尺寸后收进窗口：靠右 / 靠下右键时往左 / 往上翻，不被裁掉
+  useLayoutEffect(() => {
+    const menu = ref.current
+    if (!menu) return
+    const { width, height } = menu.getBoundingClientRect()
+    setPosition({
+      left: Math.max(MENU_EDGE_GAP, Math.min(state.x, window.innerWidth - width - MENU_EDGE_GAP)),
+      top: Math.max(MENU_EDGE_GAP, Math.min(state.y, window.innerHeight - height - MENU_EDGE_GAP)),
+    })
+  }, [state.x, state.y])
 
   return (
     <div
-      className="ink-popover ink-menu"
-      style={{ left: state.x, top: state.y, position: 'fixed' }}
+      ref={ref}
+      className="ink-popover ink-menu ink-context-menu"
+      role="menu"
+      style={{ left: position.left, top: position.top }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      {items.map((item) => (
-        <button
-          key={item.label}
-          className="ink-menu-item"
-          data-danger={item.danger ? 'true' : undefined}
-          onClick={item.action}
-        >
-          {item.icon ? <span className={`ink-icon ${item.icon}`} aria-hidden /> : null}
-          {item.label}
-        </button>
-      ))}
+      {state.entries.map((entry, index) =>
+        entry === 'separator' ? (
+          <div key={`sep-${index}`} className="ink-menu-sep" role="separator" />
+        ) : (
+          <button
+            key={entry.label}
+            className="ink-menu-item"
+            role="menuitem"
+            data-danger={entry.danger ? 'true' : undefined}
+            onClick={() => {
+              onClose()
+              entry.action()
+            }}
+          >
+            {entry.label}
+          </button>
+        ),
+      )}
     </div>
   )
 }
