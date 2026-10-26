@@ -4,6 +4,7 @@
  * 所有内容共用一条左边缘；当前项是一块很淡的圆角底色，不用彩色选中块：
  * - 顶部：只有一个安静的 Ink 字标，不配图标（折叠用正文左下角的按钮或 ⌥\）
  * - 导航：Documents 之下的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
+ * - 文件夹：库里有子文件夹时才出现，按层级缩进；点一个只看它（含子文件夹）里的文档，新建文档也放进去
  * - 分组：Today / Yesterday / Last 7 days / Earlier，小号淡色，不做全大写
  * - 条目：单行，标题 + 收藏星标 + 右对齐的短时间；不加文档图标
  * - 底部：+ New Document
@@ -14,13 +15,14 @@ import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
 import { showNativeContextMenu, type ContextMenuEntry } from '@/lib/contextMenu'
+import { isInFolder, listFolders } from '@/lib/folders'
 import { GROUP_ORDER, groupFor, listTime, type DateGroup } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { ensureMarkdownExtension, sanitizeFileName } from '@/lib/naming'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useUiStore } from '@/stores/uiStore'
+import { newDocumentFolder, useUiStore } from '@/stores/uiStore'
 import type { DocumentMeta } from '@/lib/types'
 
 /** 超过该数量启用虚拟化（spec §4.3.3） */
@@ -46,6 +48,8 @@ export function Sidebar() {
   const setSidebarWidth = useUiStore((state) => state.setSidebarWidth)
   const view = useUiStore((state) => state.sidebarView)
   const setSidebarView = useUiStore((state) => state.setSidebarView)
+  const folder = useUiStore((state) => state.sidebarFolder)
+  const openFolder = useUiStore((state) => state.openFolder)
   const documents = useDocumentStore((state) => state.documents)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const openDocument = useDocumentStore((state) => state.openDocument)
@@ -58,6 +62,7 @@ export function Sidebar() {
 
   const t = useT()
   const [navOpen, setNavOpen] = useState(true)
+  const [foldersOpen, setFoldersOpen] = useState(true)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   /** 右键菜单开着时针对的条目（画一圈细框，看得出菜单作用在哪一篇上） */
   const [contextPath, setContextPath] = useState<string | null>(null)
@@ -74,7 +79,20 @@ export function Sidebar() {
     [documents, favorites],
   )
 
+  const folders = useMemo(() => listFolders(documents), [documents])
+
+  // 看着的文件夹没了（里面的文档都删了 / 移走了）：回到全部
+  useEffect(() => {
+    if (view === 'folder' && !folders.some((entry) => entry.prefix === folder)) setSidebarView('all')
+  }, [folder, folders, setSidebarView, view])
+
+  /** 按日期分组显示（全部、某个文件夹）；Recent / Favorites 是平铺列表 */
+  const byDate = view === 'all' || view === 'folder'
+
   const visibleDocuments = useMemo(() => {
+    if (view === 'folder') {
+      return documents.filter((document) => isInFolder(document, folder))
+    }
     if (view === 'favorites') {
       return documents.filter((document) => favorites.includes(document.path))
     }
@@ -82,10 +100,10 @@ export function Sidebar() {
       return documents.slice(0, RECENT_LIMIT)
     }
     return documents
-  }, [documents, favorites, view])
+  }, [documents, favorites, folder, view])
 
   const items = useMemo<ListItem[]>(() => {
-    if (view !== 'all') {
+    if (!byDate) {
       return visibleDocuments.map((document) => ({ kind: 'document' as const, document }))
     }
     const grouped = new Map<DateGroup, DocumentMeta[]>()
@@ -103,7 +121,7 @@ export function Sidebar() {
       for (const document of list) result.push({ kind: 'document', document })
     }
     return result
-  }, [visibleDocuments, view])
+  }, [byDate, visibleDocuments])
 
   // ── 拖动调整宽度 ──
   const startResize = useCallback(
@@ -232,7 +250,7 @@ export function Sidebar() {
             <span className="ink-doc-title">{document.displayTitle || document.fileName}</span>
           )}
           {isFavorite ? <span className="ink-icon ink-icon-star ink-fav" aria-hidden /> : null}
-          <span className="ink-doc-time">{listTime(document.mtime, view === 'all')}</span>
+          <span className="ink-doc-time">{listTime(document.mtime, byDate)}</span>
         </div>
       )
     },
@@ -246,7 +264,7 @@ export function Sidebar() {
       renameValue,
       renamingPath,
       t,
-      view,
+      byDate,
     ],
   )
 
@@ -287,6 +305,34 @@ export function Sidebar() {
               </button>
             ))
           : null}
+        {folders.length > 0 ? (
+          <>
+            <button
+              className="ink-nav-section ink-nav-section-sub"
+              aria-expanded={foldersOpen}
+              onClick={() => setFoldersOpen((open) => !open)}
+            >
+              {t('sidebar.folders')}
+              <span className="ink-icon ink-icon-chevron" data-open={foldersOpen} aria-hidden />
+            </button>
+            {foldersOpen
+              ? folders.map((entry) => (
+                  <button
+                    key={entry.prefix}
+                    className="ink-nav-item"
+                    data-active={view === 'folder' && folder === entry.prefix}
+                    title={entry.prefix}
+                    style={{ paddingLeft: `calc(12px + ${entry.depth} * 14px)` }}
+                    onClick={() => openFolder(entry.prefix)}
+                  >
+                    <span className="ink-icon ink-icon-folder" aria-hidden />
+                    <span className="truncate">{entry.name}</span>
+                    <span className="ink-nav-count">{entry.count}</span>
+                  </button>
+                ))
+              : null}
+          </>
+        ) : null}
       </nav>
 
       <div className="min-h-0 flex-1 overflow-hidden py-2">
@@ -312,7 +358,7 @@ export function Sidebar() {
       </div>
 
       <div className="ink-sidebar-foot">
-        <button className="ink-new-doc" onClick={() => void createDocument()}>
+        <button className="ink-new-doc" onClick={() => void createDocument(newDocumentFolder())}>
           <span className="ink-icon ink-icon-plus" aria-hidden />
           {t('sidebar.newDocument')}
         </button>

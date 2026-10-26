@@ -1491,6 +1491,11 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   padding-bottom: 4px;
 }
 
+/* 文件夹：与上面的导航隔开一点 */
+.ink-nav-section-sub {
+  margin-top: 8px;
+}
+
 .ink-nav-section {
   display: flex;
   align-items: center;

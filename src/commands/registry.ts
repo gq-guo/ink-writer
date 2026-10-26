@@ -10,7 +10,7 @@ import { editorBridge } from '@/editor/bridge'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useUiStore } from '@/stores/uiStore'
+import { newDocumentFolder, useUiStore } from '@/stores/uiStore'
 import { t } from '@/lib/i18n'
 import { errorMessage } from '@/lib/errors'
 
@@ -42,7 +42,7 @@ export function buildCommands(): Command[] {
       id: 'doc.new',
       title: t('cmd.doc.new'),
       shortcut: '⌘N',
-      run: () => useDocumentStore.getState().createDocument(),
+      run: () => useDocumentStore.getState().createDocument(newDocumentFolder()),
     },
     {
       group: 'file',

@@ -6,7 +6,7 @@ import type { Toast } from '@/lib/types'
 
 let toastId = 0
 
-export type SidebarView = 'all' | 'recent' | 'favorites'
+export type SidebarView = 'all' | 'recent' | 'favorites' | 'folder'
 
 interface UiState {
   /** 存下的 UI 快照已读回（侧栏显隐等）：读回之前不渲染主界面，否则侧栏会从默认的收起状态动画展开 */
@@ -14,6 +14,8 @@ interface UiState {
   sidebarVisible: boolean
   sidebarWidth: number
   sidebarView: SidebarView
+  /** sidebarView 为 'folder' 时看的文件夹（dirPrefix 格式，如 "Project/"） */
+  sidebarFolder: string
   quickOpenVisible: boolean
   paletteVisible: boolean
   settingsVisible: boolean
@@ -29,6 +31,8 @@ interface UiState {
   toggleSidebar: () => void
   setSidebarVisible: (visible: boolean) => void
   setSidebarView: (view: SidebarView) => void
+  /** 侧栏切到某个文件夹 */
+  openFolder: (prefix: string) => void
   setSidebarWidth: (width: number) => void
   showQuickOpen: () => void
   hideQuickOpen: () => void
@@ -63,6 +67,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarVisible: false,
   sidebarWidth: 240,
   sidebarView: 'all',
+  sidebarFolder: '',
   quickOpenVisible: false,
   paletteVisible: false,
   settingsVisible: false,
@@ -76,6 +81,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
   setSidebarView: (view) => set({ sidebarView: view }),
+  openFolder: (prefix) => set({ sidebarView: 'folder', sidebarFolder: prefix }),
   setSidebarWidth: (width) =>
     set({ sidebarWidth: Math.min(SIDEBAR_WIDTH_RANGE.max, Math.max(SIDEBAR_WIDTH_RANGE.min, width)) }),
 
@@ -128,3 +134,9 @@ export const useUiStore = create<UiState>((set, get) => ({
     lastDocumentPath: get().lastDocumentPath,
   }),
 }))
+
+/** 新建文档放在哪个文件夹：侧栏正看着某个文件夹时放进去，否则放在库根目录（返回 dirPrefix，根目录为 ""） */
+export function newDocumentFolder(): string {
+  const { sidebarView, sidebarFolder } = useUiStore.getState()
+  return sidebarView === 'folder' ? sidebarFolder : ''
+}

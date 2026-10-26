@@ -169,6 +169,51 @@ describe('Sidebar（spec W2）', () => {
     expect(screen.getByText('最近')).toBeInTheDocument()
   })
 
+  it('有子文件夹时列出「文件夹」：点一个只看它里面的文档，回到全部恢复', () => {
+    useUiStore.setState({ sidebarView: 'all', sidebarFolder: '' })
+    render(<Sidebar />)
+    const sub = screen.getByTitle('sub/')
+    expect(sub.querySelector('.ink-nav-count')?.textContent).toBe('1')
+
+    fireEvent.click(sub)
+    expect(sub).toHaveAttribute('data-active', 'true')
+    expect(screen.getByText('更早的文档')).toBeInTheDocument()
+    expect(screen.queryByText('今天的文档')).toBeNull()
+
+    fireEvent.click(screen.getByText('全部'))
+    expect(screen.getByText('今天的文档')).toBeInTheDocument()
+  })
+
+  it('文件夹视图下新建文档建在这个文件夹里', async () => {
+    useUiStore.setState({ sidebarView: 'folder', sidebarFolder: 'sub/' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'create_document') {
+        return { path: '/library/sub/Untitled.md', fileName: 'Untitled.md', dirPrefix: 'sub/', mtime: now, size: 0, displayTitle: 'Untitled' }
+      }
+      if (command === 'list_documents') return documents
+      if (command === 'read_document') return { content: '', encoding: 'utf-8', mtime: now, size: 0, lineEnding: 'lf' }
+      return undefined
+    })
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('新建文档'))
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('create_document', { dir: '/library/sub', baseName: 'Untitled' }),
+    )
+  })
+
+  it('看着的文件夹没了：回到全部', () => {
+    useUiStore.setState({ sidebarView: 'folder', sidebarFolder: 'gone/' })
+    render(<Sidebar />)
+    expect(useUiStore.getState().sidebarView).toBe('all')
+  })
+
+  it('没有子文件夹时不显示「文件夹」', () => {
+    useDocumentStore.setState({ documents: documents.filter((document) => document.dirPrefix === '') })
+    render(<Sidebar />)
+    expect(screen.queryByText('文件夹')).toBeNull()
+  })
+
   it('Sidebar 隐藏时不占空间', () => {
     useUiStore.setState({ sidebarVisible: false })
     const { container } = render(<Sidebar />)
