@@ -16,6 +16,8 @@ import { useEditorStore } from '@/stores/editorStore'
 let pendingUpdate: Update | null = null
 /** 正在下载 / 安装：重复点击直接忽略（否则每点一次就多开一路下载） */
 let installing = false
+/** 新版本已写进 .app：之后的重试只需要重启，不用再下载一遍 */
+let installed = false
 
 export async function checkForUpdate(): Promise<void> {
   try {
@@ -46,20 +48,28 @@ export async function installUpdateAndRelaunch(): Promise<void> {
       return
     }
     pendingUpdate = update
-    let total = 0
-    let received = 0
-    await update.downloadAndInstall((event) => {
-      if (event.event === 'Started') {
-        total = event.data.contentLength ?? 0
-      } else if (event.event === 'Progress') {
-        received += event.data.chunkLength
-        if (total > 0) editor.patchUpdateInfo({ progress: Math.min(received / total, 1) })
-      } else {
-        editor.patchUpdateInfo({ status: 'installing', progress: 1 })
-      }
-    })
-    // 重启会直接结束进程：先把防抖中的正文落盘
+    if (!installed) {
+      let total = 0
+      let received = 0
+      await update.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          total = event.data.contentLength ?? 0
+        } else if (event.event === 'Progress') {
+          received += event.data.chunkLength
+          if (total > 0) editor.patchUpdateInfo({ progress: Math.min(received / total, 1) })
+        } else {
+          editor.patchUpdateInfo({ status: 'installing', progress: 1 })
+        }
+      })
+      installed = true
+    }
+    // 重启会直接结束进程：先把防抖中的正文落盘；没存上（写入失败 / 冲突未决）就先不重启
     await useDocumentStore.getState().flushSave()
+    const { saveState } = useDocumentStore.getState()
+    if (saveState !== 'idle' && saveState !== 'saved') {
+      editor.patchUpdateInfo({ status: 'unsaved', progress: null })
+      return
+    }
     await relaunch()
   } catch (error) {
     console.error('更新安装失败', error)
@@ -79,4 +89,5 @@ export function scheduleUpdateCheck(): void {
 export function resetUpdaterForTesting(): void {
   pendingUpdate = null
   installing = false
+  installed = false
 }

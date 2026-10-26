@@ -7,8 +7,9 @@ import type { DocumentStatistics, ExternalConflict, OutlineHeading } from '@/lib
 export interface UpdateInfo {
   version: string
   body: string
-  /** idle：等用户确认；downloading / installing：进行中；failed：可重试 */
-  status: 'idle' | 'downloading' | 'installing' | 'failed'
+  /** idle：等用户确认；downloading / installing：进行中；failed：可重试；
+   *  unsaved：已装好，但当前文档没存上，先不重启 */
+  status: 'idle' | 'downloading' | 'installing' | 'failed' | 'unsaved'
   /** 下载进度 0–1；服务器没给总长度时为 null */
   progress: number | null
 }

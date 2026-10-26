@@ -218,6 +218,7 @@ const zh: Record<string, string> = {
   'update.installing': '正在安装…',
   'update.failed': '更新失败。可以重试，或到 GitHub Releases 手动下载',
   'update.retry': '重试',
+  'update.unsaved': '新版本已装好，但当前文档还没保存成功。先处理保存问题，再点重试',
   'save.saving': '保存中…',
   'save.saved': '已保存',
 
@@ -471,6 +472,7 @@ const en: Record<string, string> = {
   'update.installing': 'Installing…',
   'update.failed': 'Update failed. Try again, or download it from GitHub Releases.',
   'update.retry': 'Retry',
+  'update.unsaved': 'The update is installed, but the current document isn\'t saved yet. Fix the save problem, then retry.',
   'save.saving': 'Saving…',
   'save.saved': 'Saved',
 

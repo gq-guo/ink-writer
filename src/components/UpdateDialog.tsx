@@ -28,7 +28,7 @@ export function UpdateDialog() {
         : t('update.downloadingPercent', { percent })
   } else if (status === 'installing') {
     installLabel = t('update.installing')
-  } else if (status === 'failed') {
+  } else if (status === 'failed' || status === 'unsaved') {
     installLabel = t('update.retry')
   }
 
@@ -55,9 +55,9 @@ export function UpdateDialog() {
             <div style={{ width: `${percent ?? 100}%` }} />
           </div>
         ) : null}
-        {status === 'failed' ? (
+        {status === 'failed' || status === 'unsaved' ? (
           <div className="ink-update-error" role="alert">
-            {t('update.failed')}
+            {t(status === 'failed' ? 'update.failed' : 'update.unsaved')}
           </div>
         ) : null}
         <div className="ink-dialog-actions">

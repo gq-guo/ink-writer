@@ -77,4 +77,30 @@ describe('updater', () => {
 
     expect(useEditorStore.getState().updateInfo).toMatchObject({ version: '0.4.1', status: 'failed' })
   })
+
+  it('does not relaunch while the current document is unsaved', async () => {
+    check.mockResolvedValue(fakeUpdate(async () => {}))
+    useDocumentStore.setState({ saveState: 'error' })
+    await checkForUpdate()
+
+    await installUpdateAndRelaunch()
+
+    expect(relaunch).not.toHaveBeenCalled()
+    expect(useEditorStore.getState().updateInfo?.status).toBe('unsaved')
+    useDocumentStore.setState({ saveState: 'idle' })
+  })
+
+  it('retries only the relaunch once the update is installed', async () => {
+    const update = fakeUpdate(async () => {})
+    check.mockResolvedValue(update)
+    relaunch.mockRejectedValueOnce(new Error('process.restart not allowed'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await checkForUpdate()
+
+    await installUpdateAndRelaunch()
+    await installUpdateAndRelaunch()
+
+    expect(update.downloadAndInstall).toHaveBeenCalledTimes(1)
+    expect(relaunch).toHaveBeenCalledTimes(2)
+  })
 })
