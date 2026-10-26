@@ -45,3 +45,20 @@ describe('SettingsPanel（⌘,）', () => {
     expect(useUiStore.getState().settingsVisible).toBe(false)
   })
 })
+
+describe('SettingsPanel 说明文字的位置', () => {
+  beforeEach(() => {
+    syncLocale('zh-CN')
+    useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS } })
+    useUiStore.setState({ settingsVisible: true })
+  })
+
+  it('「显示 Markdown 标记」的说明紧跟在它的开关下面，而不是打字机模式之后', () => {
+    render(<SettingsPanel />)
+    const hint = screen.getByText(/光标不在的行会隐藏/)
+    const markupRow = screen.getByRole('switch', { name: '显示 Markdown 标记' }).closest('.ink-settings-row')!
+    const typewriterRow = screen.getByRole('switch', { name: 'Typewriter Mode' }).closest('.ink-settings-row')!
+    expect(markupRow.nextElementSibling).toBe(hint)
+    expect(hint.nextElementSibling).toBe(typewriterRow)
+  })
+})

@@ -37,3 +37,15 @@ describe('dispatchCommand（快捷键与菜单栏去重）', () => {
     expect(dispatchCommand('nope', 'menu')).toBe(false)
   })
 })
+
+describe('Palette 自身条目', () => {
+  beforeEach(() => {
+    resetDispatchForTesting()
+    useUiStore.setState({ paletteVisible: false, quickOpenVisible: false, settingsVisible: false })
+  })
+
+  it('不在 Palette 里列出，但 ⌘K / 菜单栏照常执行', () => {
+    expect(dispatchCommand('app.palette', 'keyboard')).toBe(true)
+    expect(useUiStore.getState().paletteVisible).toBe(true)
+  })
+})

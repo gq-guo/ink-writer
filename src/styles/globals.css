@@ -78,9 +78,10 @@
   --highlight: #ece3c3;
   --highlight-strong: #e0d08f;
   --surface: #fcfbf8;
-  --shadow-overlay: 0 10px 32px rgba(41, 40, 36, 0.1);
+  --shadow-overlay: 0 18px 48px rgba(41, 40, 36, 0.14);
   --code-bg: #efeee8;
-  --overlay-mask: rgba(41, 40, 36, 0.14);
+  /* 遮罩靠模糊而不是压灰：底色只轻轻暗一点，正文仍能隐约看见 */
+  --overlay-mask: rgba(41, 40, 36, 0.05);
 
   /* 代码高亮（spec §2.1 代码块语法高亮） */
   --code-keyword: #a33aa3;
@@ -149,9 +150,9 @@
   --highlight: #4a4430;
   --highlight-strong: #6a5f3a;
   --surface: #23221f;
-  --shadow-overlay: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --shadow-overlay: 0 18px 48px rgba(0, 0, 0, 0.5);
   --code-bg: #262521;
-  --overlay-mask: rgba(0, 0, 0, 0.4);
+  --overlay-mask: rgba(0, 0, 0, 0.22);
 
   --code-keyword: #d08fd8;
   --code-string: #9ecb8a;
@@ -822,6 +823,8 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   position: fixed;
   inset: 0;
   background: var(--overlay-mask);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   display: flex;
   justify-content: center;
   z-index: 50;
@@ -829,6 +832,8 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-overlay {
+  /* 遮罩是 flex 容器，默认 stretch 会把面板拉满 max-height：结果少时下面空一大片 */
+  align-self: flex-start;
   width: var(--overlay-width);
   max-width: calc(100vw - 48px);
   margin-top: 18vh;
@@ -910,12 +915,11 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   text-align: center;
 }
 
+/* 和侧栏分组一样：小号淡色，不做全大写加字距 */
 .ink-overlay-group {
-  font-size: 11px;
-  color: var(--secondary);
-  padding: 8px 10px 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--secondary) 75%, var(--surface));
+  padding: 10px 10px 4px;
 }
 
 .ink-dialog {
@@ -998,7 +1002,8 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
 }
 
 .ink-settings-hint {
-  margin-top: 4px;
+  /* 紧贴上方开关，与下一行拉开 */
+  margin: -2px 0 8px;
   font-size: 11px;
   color: var(--secondary);
 }

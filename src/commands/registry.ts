@@ -26,6 +26,8 @@ export interface Command {
   run: () => void | Promise<void>
   /** 返回 false 时在 Palette 中隐藏 */
   when?: () => boolean
+  /** 只给快捷键 / 菜单栏用、不在 Palette 里列出（与 when 不同：不影响执行） */
+  hideInPalette?: boolean
 }
 
 export function buildCommands(): Command[] {
@@ -79,6 +81,8 @@ export function buildCommands(): Command[] {
       title: t('cmd.app.palette'),
       shortcut: '⌘K',
       run: () => useUiStore.getState().showPalette(),
+      // Palette 已经开着，再列「打开 Palette」没有意义；⌘K 与菜单栏仍走这条命令
+      hideInPalette: true,
     },
     {
       group: 'view',
