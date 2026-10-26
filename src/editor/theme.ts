@@ -34,7 +34,7 @@ export const inkThemeSpec = {
     margin: '0 auto',
     // ≥50vh：短文档也能把当前行滚到视口精确中心（40vh 时光标会停在 ~62%）
     padding: '16px 24px calc(50vh + 32px) 24px',
-    caretColor: 'var(--foreground)',
+    caretColor: 'var(--caret)',
   },
   '.cm-scroller': {
     overflowX: 'hidden',
@@ -44,11 +44,15 @@ export const inkThemeSpec = {
   '.cm-line': {
     padding: '0',
   },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'var(--selection)',
-  },
+  // 聚焦时 CM6 base theme 用 `&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`
+  // 画选区（默认淡紫 #d7d4f0），权重比上面一条高；不写同样的选择器，聚焦时的选区就一直是 CM 的默认色
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground':
+    {
+      backgroundColor: 'var(--selection)',
+    },
+  // 光标是朱砂色（--caret），和选区一起构成全应用唯一的彩色
   '.cm-cursor': {
-    borderLeftColor: 'var(--foreground)',
+    borderLeftColor: 'var(--caret)',
     borderLeftWidth: '2px',
   },
   '.cm-dropCursor': {
