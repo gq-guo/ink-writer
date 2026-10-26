@@ -72,6 +72,8 @@
   --sidebar: #f2f1ec;
   --foreground: #292824;
   --secondary: #929087;
+  /* 侧栏未选中的导航文字：--secondary 在侧栏底色上只有 2.8:1，这里加深到约 5:1（WCAG AA） */
+  --sidebar-muted: #68665f;
   --border: #dedcd5;
   --accent: #6e756d;
   --selection: #e8e5dd;
@@ -143,6 +145,8 @@
   --sidebar: #171614;
   --foreground: #e7e4dc;
   --secondary: #8e8b82;
+  /* 深色下 --secondary 已有 5.3:1，保持原样 */
+  --sidebar-muted: var(--secondary);
   --border: #2f2d29;
   --accent: #a3aa9f;
   --selection: #3a3833;
@@ -875,12 +879,6 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   white-space: nowrap;
 }
 
-.ink-qo-icon {
-  width: 13px;
-  height: 13px;
-  color: var(--secondary);
-}
-
 .ink-overlay-item[data-selected='true'] {
   background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
@@ -1444,7 +1442,7 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   width: 100%;
   padding: 6px 20px 6px 38px;
   font-size: 14.5px;
-  color: var(--secondary);
+  color: var(--sidebar-muted);
   text-align: left;
   transition: color 120ms ease;
 }

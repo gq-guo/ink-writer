@@ -158,7 +158,6 @@ export function QuickOpen() {
             }}
           >
             <span className="ink-qo-title">
-              <span className="ink-icon ink-icon-file ink-qo-icon" aria-hidden />
               {item.document.displayTitle || item.document.fileName}
             </span>
             <span className="ink-overlay-sub">{relativeTime(item.document.mtime)}</span>
