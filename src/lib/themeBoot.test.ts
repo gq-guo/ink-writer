@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+const { setThemeMock } = vi.hoisted(() => ({ setThemeMock: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ setTheme: setThemeMock }) }))
 
 import { applyThemeToDocument, THEME_BOOT_KEY } from '@/stores/settingsStore'
 
@@ -86,5 +88,55 @@ describe('theme-boot.js：首帧前定好深浅色', () => {
     applyThemeToDocument('system')
     expect(window.localStorage.getItem(THEME_BOOT_KEY)).toBe('system')
     expect(root.dataset.theme).toBe('light')
+  })
+})
+
+describe('macOS 半透明侧栏（data-vibrancy）', () => {
+  const root = document.documentElement
+  const originalUserAgent = navigator.userAgent
+
+  function setUserAgent(value: string) {
+    Object.defineProperty(navigator, 'userAgent', { value, configurable: true })
+  }
+
+  afterEach(() => {
+    setUserAgent(originalUserAgent)
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    root.removeAttribute('style')
+    root.removeAttribute('data-theme')
+    root.removeAttribute('data-vibrancy')
+    setThemeMock.mockClear()
+    window.localStorage.clear()
+  })
+
+  it('Mac 上的 App：标 data-vibrancy，且不铺不透明底色（让材质透出来）', () => {
+    setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    window.localStorage.setItem(THEME_BOOT_KEY, 'dark')
+    runBootScript()
+    expect(root.dataset.vibrancy).toBe('true')
+    expect(root.dataset.theme).toBe('dark')
+    expect(root.style.backgroundColor).toBe('')
+  })
+
+  it('浏览器里（没有 Tauri）：不标 data-vibrancy，照常铺底色', () => {
+    setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')
+    window.localStorage.setItem(THEME_BOOT_KEY, 'dark')
+    runBootScript()
+    expect(root.dataset.vibrancy).toBeUndefined()
+    expect(root.style.backgroundColor).toBe('rgb(27, 26, 24)')
+  })
+
+  it('窗口外观跟随主题偏好：手动深 / 浅色固定，system 交还系统', () => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    applyThemeToDocument('dark')
+    applyThemeToDocument('light')
+    applyThemeToDocument('system')
+    expect(setThemeMock.mock.calls).toEqual([['dark'], ['light'], [null]])
+  })
+
+  it('样式表只在 data-vibrancy 下把 body 设成透明、侧栏留半透明', () => {
+    expect(GLOBALS_CSS).toMatch(/\[data-vibrancy='true'\] body \{\s*background: transparent;/)
+    expect(GLOBALS_CSS).toMatch(/\[data-vibrancy='true'\] \.ink-sidebar \{\s*background: color-mix\(in srgb, var\(--sidebar\) \d+%, transparent\);/)
   })
 })

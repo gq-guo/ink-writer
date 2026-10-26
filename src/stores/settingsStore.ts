@@ -4,7 +4,7 @@
  * settingsStore 是唯一写磁盘的 store：字段变更 → debounce 300ms → 落盘。
  */
 import { create } from 'zustand'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { AppSettings } from '@/lib/types'
 import { isTauriRuntime, loadAuthorizedLibrary, readPersisted, writePersisted } from '@/lib/persist'
 import { resolveLocale, syncLocale, t, type Locale } from '@/lib/i18n'
@@ -116,16 +116,15 @@ function rememberThemeForBoot(theme: AppSettings['theme']) {
 }
 
 /**
- * 原生窗口 / webview 的底色跟随主题：刷新时页面先清空，露出的是 webview 底色（默认白色），
- * 深色模式下就是一次白闪。设置一次后在同一窗口内跨刷新保留。
+ * 原生窗口外观跟随主题：主窗口是透明窗口，背后是 macOS 的 sidebar 材质，
+ * 侧栏透出它、刷新时页面清空露出的也是它；材质和红绿灯的深浅都跟窗口外观走。
+ * 'system' 交回系统（null），手动选了深 / 浅色就固定成对应外观。设置一次后在同一窗口内跨刷新保留。
  */
-function syncNativeBackground() {
+function syncNativeTheme(theme: AppSettings['theme']) {
   if (!isTauriRuntime()) return
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--background').trim()
-  if (!color) return
   try {
-    void getCurrentWebviewWindow()
-      .setBackgroundColor(color)
+    void getCurrentWindow()
+      .setTheme(theme === 'system' ? null : theme)
       .catch(() => {})
   } catch {
     /* 窗口句柄不可用（测试环境等）时忽略 */
@@ -143,11 +142,9 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
   // theme-boot.js 铺的临时底色与 color-scheme 交还给样式表
   root.style.removeProperty('background-color')
   root.style.removeProperty('color-scheme')
-  if (root.getAttribute('data-theme') === next) {
-    // 启动脚本已经设对了 data-theme：仍要同步原生底色（这次进程里还没设过）
-    syncNativeBackground()
-    return
-  }
+  // 偏好变了就同步（比如 dark → system 而系统正好是深色：data-theme 不变，但窗口外观要交还给系统）
+  syncNativeTheme(theme)
+  if (root.getAttribute('data-theme') === next) return
   if (options?.animate && root.hasAttribute('data-theme')) {
     root.classList.add('ink-theme-transition')
     if (themeTransitionTimer) clearTimeout(themeTransitionTimer)
@@ -157,7 +154,6 @@ export function applyThemeToDocument(theme: AppSettings['theme'], options?: { an
     }, THEME_TRANSITION_MS)
   }
   root.setAttribute('data-theme', next)
-  syncNativeBackground()
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
