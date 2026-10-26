@@ -318,60 +318,100 @@ describe('documentStore 自动保存状态机（spec §12.1 / §19.2）', () => 
   })
 })
 
-describe('标题重算（spec §7.3：编辑 H1 后 1s 内更新）', () => {
+describe('文件名就是文档名（H1 不参与命名）', () => {
   beforeEach(() => {
     invokeMock.mockReset()
     vi.useFakeTimers()
   })
 
-  it('自动保存已落盘后，标题仍按最新 H1 刷新', async () => {
-    invokeMock.mockImplementation(async (command: string) => {
+  /** 模拟 Rust：读出给定内容；rename 返回新路径并记下调用 */
+  function mockLibrary(initialContent: string) {
+    invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
       switch (command) {
         case 'read_document':
-          return { content: '# Old\n', encoding: 'utf-8', mtime: 1000, size: 6, lineEnding: 'lf' }
-        case 'write_document':
-          return { mtime: 1001 }
-        case 'list_documents':
-          return []
-        default:
-          return undefined
-      }
-    })
-
-    const { documentStore } = await loadStores()
-    await documentStore.getState().openDocument('/library/Note.md')
-    documentStore.getState().onEditorChange('# New Title\n')
-    // 500ms 自动保存先落盘（pendingText 被清空），1s 后才重算标题
-    await vi.advanceTimersByTimeAsync(1200)
-
-    expect(documentStore.getState().activeDocument!.displayTitle).toBe('New Title')
-  })
-
-  it('重命名按最新正文计算标题，而不是打开时的文本', async () => {
-    invokeMock.mockImplementation(async (command: string) => {
-      switch (command) {
-        case 'read_document':
-          return { content: 'no heading', encoding: 'utf-8', mtime: 1000, size: 10, lineEnding: 'lf' }
+          return { content: initialContent, encoding: 'utf-8', mtime: 1000, size: 1, lineEnding: 'lf' }
         case 'write_document':
           return { mtime: 1001 }
         case 'rename_document':
-          return '/library/Renamed.md'
+          return `/library/${args!.newName as string}`
         case 'list_documents':
           return []
         default:
           return undefined
       }
     })
+  }
+  const renames = () =>
+    invokeMock.mock.calls.filter(([command]) => command === 'rename_document').map(([, args]) => args.newName)
 
+  it('改正文里的 H1 不会改文档名，也不会改文件名', async () => {
+    mockLibrary('# Old\n')
     const { documentStore } = await loadStores()
     await documentStore.getState().openDocument('/library/Note.md')
-    documentStore.getState().onEditorChange('# Fresh\n')
-    await vi.advanceTimersByTimeAsync(600)
+    documentStore.getState().onEditorChange('# New Title\n')
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(documentStore.getState().activeDocument!.displayTitle).toBe('Note')
+    expect(renames()).toEqual([])
+  })
+
+  it('手动改名后显示的就是新文件名', async () => {
+    mockLibrary('# Fresh\n')
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Note.md')
     await documentStore.getState().renameDocument('/library/Note.md', 'Renamed.md')
 
-    const active = documentStore.getState().activeDocument!
-    expect(active.displayTitle).toBe('Fresh')
-    expect(active.titleFromH1).toBe(true)
+    expect(documentStore.getState().activeDocument!.displayTitle).toBe('Renamed')
+  })
+
+  it('新文档（Untitled）的文件名跟着第一行走：停笔 1s 后改名，去掉 Markdown 标记', async () => {
+    mockLibrary('')
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Untitled.md')
+    documentStore.getState().onEditorChange('# 我的**文章**\n\n正文')
+    await vi.advanceTimersByTimeAsync(900)
+    expect(renames()).toEqual([])
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(renames()).toEqual(['我的文章.md'])
+    expect(documentStore.getState().activeDocument!.displayTitle).toBe('我的文章')
+    // 改名前先把正文写盘，避免保存写回旧路径
+    const commands = invokeMock.mock.calls.map(([command]) => command)
+    expect(commands.lastIndexOf('write_document')).toBeLessThan(commands.indexOf('rename_document'))
+
+    // 继续改第一行：仍然跟着走
+    documentStore.getState().onEditorChange('# 我的新文章\n\n正文')
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(renames()).toEqual(['我的文章.md', '我的新文章.md'])
+  })
+
+  it('手动改过名就不再跟着第一行走', async () => {
+    mockLibrary('')
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Untitled 2.md')
+    await documentStore.getState().renameDocument('/library/Untitled 2.md', '周报')
+    documentStore.getState().onEditorChange('# 别的标题\n')
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(renames()).toEqual(['周报.md'])
+  })
+
+  it('第一行是空的不改名', async () => {
+    mockLibrary('')
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/Untitled.md')
+    documentStore.getState().onEditorChange('\n\n')
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(renames()).toEqual([])
+  })
+
+  it('重新打开时文件名正好等于第一行（上次自动命名的结果）：接着跟随', async () => {
+    mockLibrary('# 读书笔记\n')
+    const { documentStore } = await loadStores()
+    await documentStore.getState().openDocument('/library/读书笔记.md')
+    documentStore.getState().onEditorChange('# 读书笔记 2026\n')
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(renames()).toEqual(['读书笔记 2026.md'])
   })
 })
 

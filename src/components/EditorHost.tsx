@@ -305,18 +305,14 @@ export function EditorHost() {
     if (effects.length > 0) view.dispatch({ effects })
   }, [focusMode, typewriterMode, performanceMode])
 
-  // ── 文档头（元信息行 / 文件名大标题），以块级 widget 放进编辑器 ──
+  // ── 文档头（元信息行），以块级 widget 放进编辑器 ──
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   // Focus Mode 下不显示元信息（效果图 1 只保留模式胶囊）。
-  // 字数与阅读时长只放右下状态栏，这里不再重复
+  // 字数与阅读时长只放右下状态栏，这里不再重复。
+  // 不再画文件名大标题：文件名就是文档名，显示在侧栏和顶栏；正文从第一行开始就是正文
   const headerInfo: DocHeaderInfo | null =
     activeDocument && sidebarVisible && !focusMode
-      ? {
-          title: activeDocument.titleFromH1
-            ? null
-            : activeDocument.displayTitle || activeDocument.fileName,
-          meta: [formatMetaTime(activeDocument.mtime)],
-        }
+      ? { meta: [formatMetaTime(activeDocument.mtime)] }
       : null
   const headerKey = headerInfo ? JSON.stringify(headerInfo) : ''
 

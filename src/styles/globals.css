@@ -1580,17 +1580,6 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   padding: 10px 0 24px;
 }
 
-/* 没有 H1 时用文件名当大标题，与正文 H1 同一套字号字重 */
-.ink-doc-heading {
-  font-family: var(--writing-font);
-  font-size: 1.78em;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  color: color-mix(in srgb, var(--foreground) 92%, var(--secondary));
-  padding-bottom: 12px;
-}
-
 .ink-doc-meta {
   font-size: 12.5px;
   letter-spacing: 0.01em;

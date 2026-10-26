@@ -15,7 +15,7 @@ export interface DocumentMeta {
   mtime: number
   /** 字节数 */
   size: number
-  /** 首个 H1 ?? 文件名去扩展名 ?? "Untitled"（由 Rust 侧在扫描时提取） */
+  /** 文档名 = 文件名去扩展名（空则 "Untitled"）。正文里的 H1 不参与命名 */
   displayTitle: string
 }
 
@@ -25,10 +25,6 @@ export interface Document extends DocumentMeta {
   content: string
   /** 原始编码，用于一次性提示 */
   originalEncoding: 'utf-8' | 'gbk' | 'unknown'
-  /** 首个 H1 ?? 文件名去扩展名 ?? "Untitled" */
-  displayTitle: string
-  /** displayTitle 是否来自正文首个 H1（是 → 正文上方不再重复大标题） */
-  titleFromH1: boolean
   /** 打开序号：只有 openDocument 递增，rename 等元数据变更不影响编辑器重建 */
   openSeq: number
 }

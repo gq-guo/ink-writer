@@ -21,7 +21,7 @@ pub struct DocumentMeta {
     pub dir_prefix: String,
     pub mtime: i64,
     pub size: u64,
-    /// 首个 H1 ?? 文件名去扩展名 ?? "Untitled"（spec §7.3）
+    /// 文件名去扩展名（空则 "Untitled"）：文件名就是文档的名字，不再取正文里的 H1
     pub display_title: String,
 }
 
@@ -119,7 +119,7 @@ fn meta_for(path: &Path, root: &Path) -> Option<DocumentMeta> {
             }
         })
         .unwrap_or_default();
-    let display_title = read_display_title(path, &file_name);
+    let display_title = display_title_for(&file_name);
     Some(DocumentMeta {
         path: path.to_string_lossy().to_string(),
         file_name,
@@ -130,25 +130,8 @@ fn meta_for(path: &Path, root: &Path) -> Option<DocumentMeta> {
     })
 }
 
-/// 读取文件开头的首个 H1 作为显示标题（spec §7.3）
-fn read_display_title(path: &Path, file_name: &str) -> String {
-    use std::io::Read;
-    if let Ok(mut file) = fs::File::open(path) {
-        let mut buffer = vec![0u8; 4096];
-        if let Ok(count) = file.read(&mut buffer) {
-            buffer.truncate(count);
-            if let Ok(decoded) = encoding::decode(&buffer) {
-                for line in decoded.text.lines() {
-                    if let Some(rest) = line.strip_prefix("# ") {
-                        let title = rest.trim().trim_end_matches('#').trim();
-                        if !title.is_empty() {
-                            return title.chars().take(80).collect();
-                        }
-                    }
-                }
-            }
-        }
-    }
+/// 文档的显示名 = 文件名去扩展名。H1 只是正文的一部分，不参与命名（也就不用读文件开头）
+fn display_title_for(file_name: &str) -> String {
     let stem = match file_name.rfind('.') {
         Some(index) if index > 0 => &file_name[..index],
         _ => file_name,
@@ -554,7 +537,12 @@ mod tests {
         let list = list_documents(&dir).unwrap();
         assert_eq!(list.len(), 2);
         assert!(list.iter().all(|m| m.file_name.ends_with(".md")));
-        assert_eq!(list[1].dir_prefix, "sub/");
+        // 按 mtime（秒）倒序：两次写入跨过整秒时 sub/c.md 会排到前面，所以按文件名找，不按下标
+        let nested = list
+            .iter()
+            .find(|m| m.file_name == "c.md")
+            .expect("应列出子目录里的 c.md");
+        assert_eq!(nested.dir_prefix, "sub/");
         let _ = fs::remove_dir_all(&dir);
     }
 
