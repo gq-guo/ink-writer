@@ -1442,6 +1442,17 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
+/* 页面内菜单的子菜单：小标题 + 缩进的条目 */
+.ink-menu-label {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.ink-menu-item[data-indent='true'] {
+  padding-left: 18px;
+}
+
 .ink-menu-item[data-disabled='true'] {
   color: var(--secondary);
   cursor: default;
@@ -1496,10 +1507,62 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   margin-top: 8px;
 }
 
-/* 文件夹很多时（如 Obsidian 库）列表自己滚动，文档列表仍有空间 */
-.ink-folder-list {
-  max-height: 30vh;
+/* 文件夹 / 标签很多时（如 Obsidian 库）各自滚动，文档列表仍有空间 */
+.ink-nav-scroll {
+  max-height: 24vh;
   overflow-y: auto;
+}
+
+/* 「文件夹」标题行：标题占满，右侧一个安静的 + （新建文件夹） */
+.ink-nav-section-row {
+  display: flex;
+  align-items: center;
+}
+
+.ink-nav-section-row .ink-nav-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.ink-nav-add {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 16px;
+  border-radius: 4px;
+  color: var(--secondary);
+  opacity: 0.7;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+.ink-nav-add:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.ink-nav-add .ink-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* 标签条目前的 #：和文件夹图标同宽、同色 */
+.ink-nav-hash {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: var(--secondary);
+}
+
+.ink-nav-item[data-active='true'] .ink-nav-hash {
+  color: var(--foreground);
+}
+
+.ink-nav-item input::placeholder {
+  color: var(--secondary);
 }
 
 .ink-nav-section {

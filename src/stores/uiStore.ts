@@ -6,7 +6,7 @@ import type { Toast } from '@/lib/types'
 
 let toastId = 0
 
-export type SidebarView = 'all' | 'recent' | 'favorites' | 'folder'
+export type SidebarView = 'all' | 'recent' | 'favorites' | 'folder' | 'tag'
 
 interface UiState {
   /** 存下的 UI 快照已读回（侧栏显隐等）：读回之前不渲染主界面，否则侧栏会从默认的收起状态动画展开 */
@@ -16,6 +16,8 @@ interface UiState {
   sidebarView: SidebarView
   /** sidebarView 为 'folder' 时看的文件夹（dirPrefix 格式，如 "Project/"） */
   sidebarFolder: string
+  /** sidebarView 为 'tag' 时看的标签（不含 #，大小写不敏感） */
+  sidebarTag: string
   quickOpenVisible: boolean
   /** Quick Open 打开时预填的搜索词；空 = 保留上次的输入 */
   quickOpenQuery: string
@@ -35,6 +37,8 @@ interface UiState {
   setSidebarView: (view: SidebarView) => void
   /** 侧栏切到某个文件夹 */
   openFolder: (prefix: string) => void
+  /** 侧栏切到某个标签 */
+  openTag: (tag: string) => void
   setSidebarWidth: (width: number) => void
   /** query：打开时预填的搜索词（⌘Click 标签时为 "#tag"） */
   showQuickOpen: (query?: string) => void
@@ -71,6 +75,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarWidth: 240,
   sidebarView: 'all',
   sidebarFolder: '',
+  sidebarTag: '',
   quickOpenVisible: false,
   quickOpenQuery: '',
   paletteVisible: false,
@@ -86,6 +91,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
   setSidebarView: (view) => set({ sidebarView: view }),
   openFolder: (prefix) => set({ sidebarView: 'folder', sidebarFolder: prefix }),
+  openTag: (tag) => set({ sidebarView: 'tag', sidebarTag: tag }),
   setSidebarWidth: (width) =>
     set({ sidebarWidth: Math.min(SIDEBAR_WIDTH_RANGE.max, Math.max(SIDEBAR_WIDTH_RANGE.min, width)) }),
 
