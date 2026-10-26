@@ -67,7 +67,7 @@ export function StatusBar() {
             </div>
             <div className="ink-status-row">
               <dt>{t('stats.readingTime')}</dt>
-              <dd>{statistics.readingMinutes} min</dd>
+              <dd>{statistics.readingMinutes} {t('common.minRead')}</dd>
             </div>
           </dl>
         </div>
