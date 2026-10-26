@@ -358,6 +358,17 @@ fn rename_document(
     Ok(new_path)
 }
 
+/// 编辑器内联显示图片：原样返回字节（走二进制 IPC，不经 JSON）
+#[tauri::command(async)]
+fn read_image(
+    state: State<'_, AccessState>,
+    path: String,
+) -> Result<tauri::ipc::Response, CommandError> {
+    let target = to_path(&path);
+    lock(&state).check_image(&target)?;
+    fs_ops::read_image(&target).map(tauri::ipc::Response::new)
+}
+
 #[tauri::command]
 fn delete_document(state: State<'_, AccessState>, path: String) -> Result<(), CommandError> {
     let path = to_path(&path);
@@ -599,6 +610,7 @@ pub fn run() {
             create_document,
             rename_document,
             delete_document,
+            read_image,
             copy_image_bytes,
             search_content,
             write_text_file,

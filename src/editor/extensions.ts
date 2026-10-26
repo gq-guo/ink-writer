@@ -40,6 +40,8 @@ import { makePlaceholder, placeholderCompartment } from './placeholder'
 import { useLocaleStore } from '@/lib/i18n'
 import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
+import { inlineImages } from './inlineImages'
+import { loadInlineImage } from '@/lib/imageLoader'
 import { inkLinkHandler } from './links'
 import { inkDocHeader } from './docHeader'
 import { inkOutlinePlugin } from './outline'
@@ -114,6 +116,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       getDocDir: options.getDocDir,
       onError: options.onError,
     }),
+    inlineImages({ getDocDir: options.getDocDir, load: loadInlineImage }),
     inkLinkHandler({
       getDocDir: options.getDocDir,
       onOpenUrl: options.onOpenUrl,

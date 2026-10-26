@@ -25,6 +25,7 @@ import { setDocHeaderEffect, type DocHeaderInfo } from '@/editor/docHeader'
 import { formatMetaTime } from '@/lib/format'
 import { registerEditorBridge } from '@/editor/bridge'
 import { errorMessage } from '@/lib/errors'
+import { clearInlineImageCache } from '@/lib/imageLoader'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { resolveTheme, useSettingsStore } from '@/stores/settingsStore'
@@ -230,6 +231,9 @@ export function EditorHost() {
       }
     }
   }, [performanceMode, t])
+
+  // ── 切走一篇文档时释放它的内联图片（blob URL）──
+  useEffect(() => () => clearInlineImageCache(), [openSeq])
 
   // ── 语言切换：同步查找面板与空文档占位的文案 ──
   const locale = useLocaleStore((state) => state.locale)

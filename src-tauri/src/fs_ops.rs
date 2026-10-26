@@ -522,6 +522,21 @@ pub fn delete_document(path: &Path) -> Result<(), CommandError> {
         .map_err(|e| CommandError::new("trashFailed", format!("{} ({})", path.display(), e)))
 }
 
+/// 内联显示的图片上限：再大的图读进 webview 只会拖慢编辑器
+const MAX_INLINE_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// 读图片字节（编辑器内联显示用）
+pub fn read_image(path: &Path) -> Result<Vec<u8>, CommandError> {
+    let size = fs::metadata(path).map_err(|e| io_message(path, &e))?.len();
+    if size > MAX_INLINE_IMAGE_BYTES {
+        return Err(CommandError::new(
+            "imageTooLarge",
+            path.display().to_string(),
+        ));
+    }
+    fs::read(path).map_err(|e| io_message(path, &e))
+}
+
 /// 写入图片字节（拖拽 / 粘贴），重名追加 -2/-3，返回相对路径
 pub fn copy_image_bytes(
     doc_dir: &Path,
