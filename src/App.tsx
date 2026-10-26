@@ -27,15 +27,17 @@ import { installSidebarWidthFreeze } from '@/lib/sidebarAnimation'
 import { installAppMenu } from '@/lib/appMenu'
 import { openRequestedFiles } from '@/lib/openRequests'
 import { readPersisted, writePersisted } from '@/lib/persist'
+import { pickStartupDocument } from '@/lib/startupDocument'
 import { errorMessage } from '@/lib/errors'
 import { t } from '@/lib/i18n'
 import { useDocumentStore, type FsEventPayload } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useUiStore } from '@/stores/uiStore'
+import { useUiStore, type UiSnapshot } from '@/stores/uiStore'
 
 export default function App() {
   const hydrated = useSettingsStore((state) => state.hydrated)
+  const uiHydrated = useUiStore((state) => state.hydrated)
   const libraryPath = useSettingsStore((state) => state.settings.libraryPath)
   const focusMode = useEditorStore((state) => state.focusMode)
   const typing = useEditorStore((state) => state.typing)
@@ -100,10 +102,13 @@ export default function App() {
         const openedRequested = await openRequestedFiles()
         const state = useDocumentStore.getState()
         if (openedRequested || state.activeDocument) return
-        if (state.documents.length === 0) {
-          await state.createDocument()
+        // 直接读存下的 UI 快照：uiStore 的 hydrate 排在设置之后，这时可能还没读回来
+        const ui = await readPersisted<Partial<UiSnapshot>>('ui', {})
+        const startupPath = pickStartupDocument(state.documents, ui.lastDocumentPath)
+        if (startupPath) {
+          await state.openDocument(startupPath)
         } else {
-          await state.openDocument(state.documents[0]!.path)
+          await state.createDocument()
         }
       } catch (error) {
         // 启动链不再无声失败（此前 HMR 重载异常会让 documents 永远为空）
@@ -172,23 +177,45 @@ export default function App() {
     }
   }, [])
 
-  // ── 持久化 UI 快照（防抖 500ms）──
+  // ── 记下当前打开的文档（打开 / 新建 / 改名都会换路径），刷新、重启后回到这一篇 ──
+  useEffect(
+    () =>
+      useDocumentStore.subscribe((state, prev) => {
+        const path = state.activeDocument?.path ?? null
+        if (path && path !== (prev.activeDocument?.path ?? null)) {
+          useUiStore.getState().setLastDocumentPath(path)
+        }
+      }),
+    [],
+  )
+
+  // ── 持久化 UI 快照（防抖 500ms；刷新 / 关闭前把还没写的立刻写掉）──
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
+    const write = () => void writePersisted('ui', useUiStore.getState().snapshot())
     const unsubscribe = useUiStore.subscribe(() => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
-        void writePersisted('ui', useUiStore.getState().snapshot())
+        write()
       }, 500)
     })
+    const flushPending = () => {
+      if (!timer) return
+      clearTimeout(timer)
+      timer = null
+      write()
+    }
+    window.addEventListener('beforeunload', flushPending)
     return () => {
       unsubscribe()
+      window.removeEventListener('beforeunload', flushPending)
       if (timer) clearTimeout(timer)
     }
   }, [])
 
-  if (!hydrated) return null
+  // UI 快照也要读回再渲染：侧栏显隐是存下来的，先按默认（收起）渲染再展开，刷新时就会看到侧栏动画展开一下
+  if (!hydrated || !uiHydrated) return null
 
   if (!libraryPath) {
     return (

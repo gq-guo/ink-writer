@@ -9,6 +9,8 @@ let toastId = 0
 export type SidebarView = 'all' | 'recent' | 'favorites'
 
 interface UiState {
+  /** 存下的 UI 快照已读回（侧栏显隐等）：读回之前不渲染主界面，否则侧栏会从默认的收起状态动画展开 */
+  hydrated: boolean
   sidebarVisible: boolean
   sidebarWidth: number
   sidebarView: SidebarView
@@ -21,6 +23,8 @@ interface UiState {
   statusExpanded: boolean
   /** 顶栏文件名进入内联编辑的信号（命令/菜单触发） */
   renameSignal: number
+  /** 当前打开的文档：刷新 / 重启后回到这一篇，而不是库里最新的一篇 */
+  lastDocumentPath: string | null
 
   toggleSidebar: () => void
   setSidebarVisible: (visible: boolean) => void
@@ -39,6 +43,7 @@ interface UiState {
   /** 请求顶栏进入文件名编辑态（window.prompt 在 WKWebView 不可用） */
   requestRename: () => void
   pushRecentCommand: (id: string) => void
+  setLastDocumentPath: (path: string | null) => void
   hydrate: (snapshot: Partial<UiSnapshot>) => void
   snapshot: () => UiSnapshot
 }
@@ -47,12 +52,14 @@ export interface UiSnapshot {
   sidebarVisible: boolean
   sidebarWidth: number
   recentCommands: string[]
+  lastDocumentPath: string | null
 }
 
 export const SIDEBAR_WIDTH_RANGE = { min: 200, max: 320 } as const
 export const RECENT_COMMANDS_LIMIT = 5
 
 export const useUiStore = create<UiState>((set, get) => ({
+  hydrated: false,
   sidebarVisible: false,
   sidebarWidth: 240,
   sidebarView: 'all',
@@ -64,6 +71,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   toasts: [],
   statusExpanded: false,
   renameSignal: 0,
+  lastDocumentPath: null,
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
@@ -98,19 +106,25 @@ export const useUiStore = create<UiState>((set, get) => ({
       recentCommands: [id, ...s.recentCommands.filter((c) => c !== id)].slice(0, RECENT_COMMANDS_LIMIT),
     })),
 
+  setLastDocumentPath: (path) => set({ lastDocumentPath: path }),
+
   hydrate: (snapshot) =>
     set({
+      hydrated: true,
       sidebarVisible: snapshot.sidebarVisible ?? get().sidebarVisible,
       sidebarWidth: Math.min(
         SIDEBAR_WIDTH_RANGE.max,
         Math.max(SIDEBAR_WIDTH_RANGE.min, snapshot.sidebarWidth ?? get().sidebarWidth),
       ),
       recentCommands: snapshot.recentCommands ?? get().recentCommands,
+      // 读回之前用户已经打开了别的文档：以当前为准，不让旧值覆盖
+      lastDocumentPath: get().lastDocumentPath ?? snapshot.lastDocumentPath ?? null,
     }),
 
   snapshot: () => ({
     sidebarVisible: get().sidebarVisible,
     sidebarWidth: get().sidebarWidth,
     recentCommands: get().recentCommands,
+    lastDocumentPath: get().lastDocumentPath,
   }),
 }))

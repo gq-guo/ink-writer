@@ -13,6 +13,7 @@ import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { syncLocale } from '@/lib/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUiStore } from '@/stores/uiStore'
 
 describe('App 启动流程（spec §3 / W1 / W7）', () => {
   beforeEach(() => {
@@ -322,6 +323,64 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
       .filter(([command]) => command === 'read_document')
       .map(([, args]) => (args as { path: string }).path)
     expect(readPaths).toEqual(['/Users/me/Desktop/Outside.md'])
+  })
+})
+
+describe('刷新 / 重启后回到上次打开的文档', () => {
+  const library = '/tmp/ink-reopen-library'
+  const docs = [
+    { path: `${library}/get.md`, fileName: 'get.md', dirPrefix: '', mtime: 2000, size: 4, displayTitle: 'get' },
+    { path: `${library}/中台测试.md`, fileName: '中台测试.md', dirPrefix: '', mtime: 1000, size: 4, displayTitle: '中台测试' },
+  ]
+
+  beforeEach(() => {
+    invokeMock.mockReset()
+    window.localStorage.clear()
+    syncLocale('zh-CN')
+    useDocumentStore.setState({ documents: [], activeDocument: null, saveState: 'idle' })
+    useUiStore.setState({ lastDocumentPath: null })
+    window.localStorage.setItem('ink:settings', JSON.stringify({ libraryPath: library }))
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'take_open_requests':
+          return []
+        case 'list_documents':
+          return docs
+        case 'read_document':
+          return { content: '正文\n', encoding: 'utf-8', mtime: 1000, size: 4, lineEnding: 'lf' }
+        default:
+          return undefined
+      }
+    })
+  })
+
+  it('上次停在「中台测试」：启动后打开它，而不是最新的 get.md', async () => {
+    window.localStorage.setItem('ink:ui', JSON.stringify({ lastDocumentPath: `${library}/中台测试.md` }))
+    render(<App />)
+    await waitFor(() => expect(useDocumentStore.getState().activeDocument?.path).toBe(`${library}/中台测试.md`))
+  })
+
+  it('侧栏按存下的状态直接出现，不会先收起再动画展开', async () => {
+    window.localStorage.setItem('ink:ui', JSON.stringify({ sidebarVisible: true }))
+    useUiStore.setState({ hydrated: false, sidebarVisible: false })
+    const seen: (string | null)[] = []
+    const observer = new MutationObserver(() => {
+      const sidebar = document.querySelector('.ink-sidebar')
+      if (sidebar) seen.push(sidebar.getAttribute('data-hidden'))
+    })
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-hidden'] })
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ink-sidebar')).toBeTruthy())
+    await waitFor(() => expect(useDocumentStore.getState().activeDocument).not.toBeNull())
+    observer.disconnect()
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen).not.toContain('true')
+  })
+
+  it('没有记录时仍打开第一篇，并把它记下来', async () => {
+    render(<App />)
+    await waitFor(() => expect(useDocumentStore.getState().activeDocument?.path).toBe(`${library}/get.md`))
+    expect(useUiStore.getState().lastDocumentPath).toBe(`${library}/get.md`)
   })
 })
 
