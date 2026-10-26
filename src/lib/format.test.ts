@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { listTime } from '@/lib/format'
+import { formatMetaTime, listTime, relativeTime } from '@/lib/format'
 import { syncLocale } from '@/lib/i18n'
 
 // 2026-10-21（周三）12:00 本地时间
@@ -20,9 +20,19 @@ describe('listTime（侧栏右侧短时间）', () => {
     expect(listTime(at(2026, 9, 20, 18, 32), false, NOW)).toBe('昨天')
   })
 
-  it('更早：同年显示月-日，跨年显示完整日期', () => {
-    expect(listTime(at(2026, 9, 18, 8, 0), true, NOW)).toBe('10-18')
-    expect(listTime(at(2026, 4, 1, 8, 0), true, NOW)).toBe('05-01')
-    expect(listTime(at(2024, 4, 1, 8, 0), true, NOW)).toBe('2024-05-01')
+  it('更早：按界面语言写日期，同年省略年份', () => {
+    syncLocale('zh-CN')
+    expect(listTime(at(2026, 9, 18, 8, 0), true, NOW)).toBe('10月18日')
+    expect(listTime(at(2026, 4, 1, 8, 0), true, NOW)).toBe('5月1日')
+    expect(listTime(at(2024, 4, 1, 8, 0), true, NOW)).toBe('2024年5月1日')
+    syncLocale('en')
+    expect(listTime(at(2026, 9, 18, 8, 0), true, NOW)).toBe('Oct 18')
+    expect(listTime(at(2024, 4, 1, 8, 0), true, NOW)).toBe('May 1, 2024')
+  })
+
+  it('Quick Open 的相对时间与文档头在一周以前也用同一种日期写法', () => {
+    syncLocale('zh-CN')
+    expect(relativeTime(at(2026, 4, 1, 8, 0), NOW)).toBe('5月1日')
+    expect(formatMetaTime(at(2024, 4, 1, 8, 0), NOW)).toBe('2024年5月1日')
   })
 })
