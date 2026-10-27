@@ -112,6 +112,10 @@ export const inkThemeSpec = {
     color: 'var(--secondary)',
     fontSize: '0.8em',
   },
+  // 图片行在光标外只剩文件名：弱化显示，图片本身画在下一行
+  '.cm-md-image-name': {
+    color: 'var(--secondary)',
+  },
   '.cm-md-link-text': {
     color: 'var(--foreground)',
     textDecoration: 'underline',

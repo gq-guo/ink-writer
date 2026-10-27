@@ -5,8 +5,9 @@
  *
  * 标记隐藏（设置「显示 Markdown 标记」关闭时，默认）：光标不在的行隐藏
  * 标题的 # 、粗斜体的 * _、删除线的 ~~、行内代码的反引号、行内链接的 [ ](url)、转义的 \；
+ * 图片 `![alt](assets/x.png)` 只留文件名 `x.png`（图片本身画在下一行，见 inlineImages.ts）；
  * 光标所在行（含选区覆盖的行）照常显示全部标记，编辑时看到的仍是源码。
- * 列表、引用、图片、引用式链接、表格的标记不隐藏（只弱化）；任务项例外：`- [ ] ` 换成复选框（见 tasks.ts）。
+ * 列表、引用、引用式链接、表格的标记不隐藏（只弱化）；任务项例外：`- [ ] ` 换成复选框（见 tasks.ts）。
  *
  * 块级样式：遍历 syntaxTree(view.state) 的可见区间（view.visibleRanges）
  * 行内样式：同一插件对可见区间内的行内节点产出 Decoration.mark
@@ -116,6 +117,20 @@ function childrenOf(node: SyntaxNode): SyntaxNode[] {
     child = child.nextSibling
   }
   return out
+}
+
+/**
+ * 图片地址里文件名所在的区间（相对 URL 节点起点）：`assets/a b.png?v=1` → `a b.png`；
+ * 尖括号形式 `<assets/x.png>` 去掉括号。没有文件名（以 / 结尾）返回 null
+ */
+export function imageFileName(url: string): { from: number; to: number } | null {
+  const angled = url.startsWith('<') && url.endsWith('>')
+  const offset = angled ? 1 : 0
+  const inner = angled ? url.slice(1, -1) : url
+  const path = inner.split(/[?#]/)[0] ?? ''
+  const from = offset + path.lastIndexOf('/') + 1
+  const to = offset + path.length
+  return to > from ? { from, to } : null
 }
 
 /** 取得「标记之间」的内容区间（粗体 / 斜体 / 删除线 / 行内代码 / 链接文本） */
@@ -379,10 +394,22 @@ export function buildDecorations(
             const text = linkText(node)
             if (!text) break
             addMark(text.open.to, text.close.from, 'cm-md-link-text')
-            // 行内链接 [文字](url)：光标外只留下划线的文字；图片与引用式链接保持原样
+            // 行内链接 [文字](url)：光标外只留下划线的文字；引用式链接保持原样
             if (name === 'Link' && children.some((child) => child.name === 'URL')) {
               conceal(text.open.from, text.open.to)
               conceal(text.close.from, node.to)
+            }
+            // 图片 ![alt](assets/x.png)：光标外只留文件名 x.png（图片画在下面一行）
+            const url = name === 'Image' ? children.find((child) => child.name === 'URL') : undefined
+            if (url) {
+              const fileName = imageFileName(state.doc.sliceString(url.from, url.to))
+              if (fileName) {
+                const nameFrom = url.from + fileName.from
+                const nameTo = url.from + fileName.to
+                addMark(nameFrom, nameTo, 'cm-md-image-name')
+                conceal(node.from, nameFrom)
+                conceal(nameTo, node.to)
+              }
             }
             break
           }
