@@ -75,7 +75,7 @@ impl std::fmt::Display for CommandError {
     }
 }
 
-fn io_message(path: &Path, err: &std::io::Error) -> CommandError {
+pub(crate) fn io_message(path: &Path, err: &std::io::Error) -> CommandError {
     let code = match err.kind() {
         std::io::ErrorKind::PermissionDenied => "permissionDenied",
         std::io::ErrorKind::NotFound => "notFound",
@@ -100,7 +100,7 @@ pub fn mtime_of(meta: &fs::Metadata) -> f64 {
         .unwrap_or(0.0)
 }
 
-fn is_hidden(name: &str) -> bool {
+pub(crate) fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
@@ -116,7 +116,7 @@ fn has_markdown_extension(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn is_markdown(name: &str) -> bool {
+pub(crate) fn is_markdown(name: &str) -> bool {
     Path::new(name)
         .extension()
         .map(|e| e.eq_ignore_ascii_case(MARKDOWN_EXT))
@@ -385,7 +385,7 @@ pub fn create_document(dir: &Path, base_name: &str) -> Result<DocumentMeta, Comm
 }
 
 /// 只由一个普通路径分量组成的文件名（不含 `/`、`..`），且不以 `.` 开头（不生成隐藏文件）
-fn is_single_file_name(name: &str) -> bool {
+pub(crate) fn is_single_file_name(name: &str) -> bool {
     let mut components = Path::new(name).components();
     matches!(
         (components.next(), components.next()),
@@ -422,7 +422,7 @@ pub fn rename_document(path: &Path, new_name: &str) -> Result<String, CommandErr
 
 /// 大小写变体（aa.md → AA.md）在 macOS 大小写不敏感文件系统上是同一个文件，
 /// target.exists() 为 true，需按 canonical 路径判断
-fn is_same_file(a: &Path, b: &Path) -> bool {
+pub(crate) fn is_same_file(a: &Path, b: &Path) -> bool {
     fs::canonicalize(a)
         .ok()
         .zip(fs::canonicalize(b).ok())

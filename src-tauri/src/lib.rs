@@ -6,6 +6,7 @@
 //! - 编码永远以 UTF-8 写出，读取时兼容 GBK
 mod access;
 mod encoding;
+mod folders;
 mod fs_ops;
 mod open_requests;
 mod search;
@@ -371,6 +372,49 @@ fn read_image(
 }
 
 #[tauri::command]
+fn list_folders(state: State<'_, AccessState>, root: String) -> Result<Vec<String>, CommandError> {
+    let root = to_path(&root);
+    lock(&state).check_library_root(&root)?;
+    folders::list_folders(&root)
+}
+
+#[tauri::command]
+fn create_folder(
+    state: State<'_, AccessState>,
+    parent: String,
+    name: String,
+) -> Result<String, CommandError> {
+    let parent = to_path(&parent);
+    lock(&state).check_library_dir(&parent)?;
+    folders::create_folder(&parent, &name)
+}
+
+/// 把库里的文档移到库里的另一个文件夹（图片一并复制，见 folders::move_document）
+#[tauri::command]
+fn move_document(
+    state: State<'_, AccessState>,
+    path: String,
+    target_dir: String,
+) -> Result<String, CommandError> {
+    let source = to_path(&path);
+    let target_dir = to_path(&target_dir);
+    let mut access = lock(&state);
+    access.check_document(&source)?;
+    let source_dir = source
+        .parent()
+        .ok_or_else(|| CommandError::new("invalidPath", path.clone()))?;
+    // 只在库内移动：库外打开的文件不挪进库里
+    access.check_library_dir(source_dir)?;
+    access.check_library_dir(&target_dir)?;
+    let new_path = folders::move_document(&source, &target_dir)?;
+    access.rename_opened_file(&source, Path::new(&new_path));
+    // 自身移动产生的 watch 事件不应触发「外部删除」提示 / 静默重载
+    watcher::record_self_write(&source);
+    watcher::record_self_write(Path::new(&new_path));
+    Ok(new_path)
+}
+
+#[tauri::command]
 fn delete_document(state: State<'_, AccessState>, path: String) -> Result<(), CommandError> {
     let path = to_path(&path);
     lock(&state).check_document(&path)?;
@@ -632,6 +676,9 @@ pub fn run() {
             write_document,
             create_document,
             rename_document,
+            move_document,
+            list_folders,
+            create_folder,
             delete_document,
             read_image,
             copy_image_bytes,

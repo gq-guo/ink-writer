@@ -21,7 +21,17 @@ export type ContextMenuEntry =
       /** 危险操作（移到废纸篓）：页面内菜单标红；原生菜单按系统惯例不上色 */
       danger?: boolean
     }
+  /** 子菜单（「移到…」）：原生菜单里是二级菜单，页面内菜单里展开成缩进的一组 */
+  | { label: string; children: ContextMenuEntry[] }
   | 'separator'
+
+type NativeItem = { item: 'Separator' } | { text: string; action: () => void } | { text: string; items: NativeItem[] }
+
+function toNative(entry: ContextMenuEntry): NativeItem {
+  if (entry === 'separator') return { item: 'Separator' }
+  if ('children' in entry) return { text: entry.label, items: entry.children.map(toNative) }
+  return { text: entry.label, action: entry.action }
+}
 
 /** 上一次弹出的原生菜单：等到下一次右键时再释放（见文件头的说明） */
 let previousMenu: Menu | null = null
@@ -42,11 +52,7 @@ export async function showNativeContextMenu(entries: ContextMenuEntry[]): Promis
       previousMenu = null
       await stale.close().catch(() => {})
     }
-    const menu = await Menu.new({
-      items: entries.map((entry) =>
-        entry === 'separator' ? { item: 'Separator' as const } : { text: entry.label, action: entry.action },
-      ),
-    })
+    const menu = await Menu.new({ items: entries.map(toNative) })
     previousMenu = menu
     await menu.popup()
     return true

@@ -111,7 +111,10 @@ export interface TagHit extends SearchHit {
 /** 全库的一个标签与出现次数 */
 export interface TagCount {
   tag: string
+  /** 全库出现次数 */
   count: number
+  /** 用到这个标签的文档（绝对路径，不重复） */
+  paths: string[]
 }
 
 export interface Toast {

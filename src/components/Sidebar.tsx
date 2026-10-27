@@ -4,16 +4,19 @@
  * 所有内容共用一条左边缘；当前项是一块很淡的圆角底色，不用彩色选中块：
  * - 顶部：只有一个安静的 Ink 字标，不配图标（折叠用正文左下角的按钮或 ⌥\）
  * - 导航：Documents 之下的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
- * - 文件夹：库里有子文件夹时才出现，按层级缩进；点一个只看它（含子文件夹）里的文档，新建文档也放进去
+ * - 文件夹：标题右侧 + 新建；按层级缩进，点一个只看它（含子文件夹）里的文档，新建文档也放进去
+ * - 标签：库里有 #标签 时出现；点一个只看用到它的文档（见 SidebarSections）
  * - 分组：Today / Yesterday / Last 7 days / Earlier，小号淡色，不做全大写
  * - 条目：单行，标题 + 收藏星标 + 右对齐的短时间；不加文档图标
  * - 底部：+ New Document
- * - 右键：App 里是 macOS 原生菜单；浏览器 / 测试里退回页面内菜单。菜单开着时被右键的条目带一圈细框（同 Finder）
+ * - 右键：App 里是 macOS 原生菜单；浏览器 / 测试里退回页面内菜单。菜单开着时被右键的条目带一圈细框（同 Finder）。
+ *   「移到」子菜单把文档移到别的文件夹
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
+import { FolderSection, TagSection } from './SidebarSections'
 import { showNativeContextMenu, type ContextMenuEntry } from '@/lib/contextMenu'
 import { isInFolder, listFolders } from '@/lib/folders'
 import { GROUP_ORDER, groupFor, listTime, type DateGroup } from '@/lib/format'
@@ -23,12 +26,14 @@ import { useDocumentStore } from '@/stores/documentStore'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { newDocumentFolder, useUiStore } from '@/stores/uiStore'
-import type { DocumentMeta } from '@/lib/types'
+import type { DocumentMeta, TagCount } from '@/lib/types'
 
 /** 超过该数量启用虚拟化（spec §4.3.3） */
 const VIRTUALIZE_THRESHOLD = 500
 /** Recent 视图显示的条数 */
 const RECENT_LIMIT = 10
+/** 文档变化 / 保存后等这么久再重新统计标签（外部修改会连着触发好几次刷新）；短一点，移动后标签视图少闪 */
+const TAGS_REFRESH_DEBOUNCE_MS = 250
 
 type ListItem =
   | { kind: 'group'; group: DateGroup }
@@ -50,7 +55,15 @@ export function Sidebar() {
   const setSidebarView = useUiStore((state) => state.setSidebarView)
   const folder = useUiStore((state) => state.sidebarFolder)
   const openFolder = useUiStore((state) => state.openFolder)
+  const sidebarTag = useUiStore((state) => state.sidebarTag)
+  const openTag = useUiStore((state) => state.openTag)
   const documents = useDocumentStore((state) => state.documents)
+  const folderPrefixes = useDocumentStore((state) => state.folders)
+  const libraryPath = useDocumentStore((state) => state.libraryPath)
+  /** 当前文档刚保存完：自己写进去的 #标签 也要统计（保存不会刷新文档列表） */
+  const justSaved = useDocumentStore((state) => state.saveState === 'saved')
+  const createFolder = useDocumentStore((state) => state.createFolder)
+  const moveDocument = useDocumentStore((state) => state.moveDocument)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const openDocument = useDocumentStore((state) => state.openDocument)
   const renameDocument = useDocumentStore((state) => state.renameDocument)
@@ -62,7 +75,10 @@ export function Sidebar() {
 
   const t = useT()
   const [navOpen, setNavOpen] = useState(true)
-  const [foldersOpen, setFoldersOpen] = useState(true)
+  /** 全库标签，连同它属于哪个文档库：换库后旧库的标签不算数 */
+  const [tagsState, setTagsState] = useState<{ root: string; tags: TagCount[] } | null>(null)
+  /** null = 当前库的标签还没读到（这时不判断「看着的标签没了」） */
+  const tags = tagsState?.root === libraryPath ? tagsState.tags : null
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   /** 右键菜单开着时针对的条目（画一圈细框，看得出菜单作用在哪一篇上） */
   const [contextPath, setContextPath] = useState<string | null>(null)
@@ -79,19 +95,47 @@ export function Sidebar() {
     [documents, favorites],
   )
 
-  const folders = useMemo(() => listFolders(documents), [documents])
+  const folders = useMemo(() => listFolders(documents, folderPrefixes), [documents, folderPrefixes])
 
-  // 看着的文件夹没了（里面的文档都删了 / 移走了）：回到全部
+  // 标签要读全文：文档列表变了（新建、移动、外部修改）或当前文档刚保存完之后，防抖再统计一次，在后台线程扫
+  useEffect(() => {
+    if (!libraryPath) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      const done = (list: TagCount[]) => {
+        if (!cancelled) setTagsState({ root: libraryPath, tags: list })
+      }
+      void invoke<TagCount[]>('list_tags', { root: libraryPath })
+        .then((list) => done(list ?? []))
+        .catch(() => done([]))
+    }, TAGS_REFRESH_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [documents, libraryPath, justSaved])
+
+  const activeTag = useMemo(
+    () => tags?.find((tag) => tag.tag.toLowerCase() === sidebarTag.toLowerCase()) ?? null,
+    [sidebarTag, tags],
+  )
+
+  // 看着的文件夹 / 标签没了（文档都删了、移走了、标签改掉了）：回到全部
   useEffect(() => {
     if (view === 'folder' && !folders.some((entry) => entry.prefix === folder)) setSidebarView('all')
-  }, [folder, folders, setSidebarView, view])
+    if (view === 'tag' && tags !== null && !activeTag) setSidebarView('all')
+  }, [activeTag, folder, folders, setSidebarView, tags, view])
 
-  /** 按日期分组显示（全部、某个文件夹）；Recent / Favorites 是平铺列表 */
-  const byDate = view === 'all' || view === 'folder'
+  /** 按日期分组显示（全部、某个文件夹、某个标签）；Recent / Favorites 是平铺列表 */
+  const byDate = view === 'all' || view === 'folder' || view === 'tag'
 
   const visibleDocuments = useMemo(() => {
     if (view === 'folder') {
       return documents.filter((document) => isInFolder(document, folder))
+    }
+    if (view === 'tag') {
+      const paths = new Set(activeTag?.paths ?? [])
+      return documents.filter((document) => paths.has(document.path))
     }
     if (view === 'favorites') {
       return documents.filter((document) => favorites.includes(document.path))
@@ -100,7 +144,7 @@ export function Sidebar() {
       return documents.slice(0, RECENT_LIMIT)
     }
     return documents
-  }, [documents, favorites, folder, view])
+  }, [activeTag, documents, favorites, folder, view])
 
   const items = useMemo<ListItem[]>(() => {
     if (!byDate) {
@@ -162,6 +206,27 @@ export function Sidebar() {
     [renameDocument, renameValue],
   )
 
+  /** 「移到」子菜单：库根目录 + 各文件夹（不含文档现在所在的）；没有别处可去时不显示 */
+  const moveEntries = useCallback(
+    (document: DocumentMeta): ContextMenuEntry[] => {
+      const targets = [
+        { prefix: '', label: t('sidebar.libraryRoot') },
+        ...folders.map((entry) => ({ prefix: entry.prefix, label: entry.prefix.replace(/\/$/, '') })),
+      ].filter((target) => target.prefix !== document.dirPrefix)
+      if (targets.length === 0) return []
+      return [
+        {
+          label: t('sidebar.context.moveTo'),
+          children: targets.map((target) => ({
+            label: target.label,
+            action: () => void moveDocument(document.path, target.prefix),
+          })),
+        },
+      ]
+    },
+    [folders, moveDocument, t],
+  )
+
   const contextEntries = useCallback(
     (document: DocumentMeta): ContextMenuEntry[] => {
       const isFavorite = favorites.includes(document.path)
@@ -183,6 +248,7 @@ export function Sidebar() {
             setRenameValue(document.fileName.replace(/\.(md|markdown|mdown|txt)$/i, ''))
           },
         },
+        ...moveEntries(document),
         {
           label: t('sidebar.context.reveal'),
           action: () => void invoke('reveal_in_finder', { path: document.path }),
@@ -191,7 +257,7 @@ export function Sidebar() {
         { label: t('sidebar.context.trash'), action: () => void deleteDocument(document.path), danger: true },
       ]
     },
-    [deleteDocument, favorites, t, updateSettings],
+    [deleteDocument, favorites, moveEntries, t, updateSettings],
   )
 
   const openContextMenu = useCallback(
@@ -308,37 +374,17 @@ export function Sidebar() {
               </button>
             ))
           : null}
-        {folders.length > 0 ? (
-          <>
-            <button
-              className="ink-nav-section ink-nav-section-sub"
-              aria-expanded={foldersOpen}
-              onClick={() => setFoldersOpen((open) => !open)}
-            >
-              {t('sidebar.folders')}
-              <span className="ink-icon ink-icon-chevron" data-open={foldersOpen} aria-hidden />
-            </button>
-            {foldersOpen ? (
-              // 文件夹多时自己滚动，不把下面的文档列表和「新建文档」挤出去
-              <div className="ink-folder-list">
-                {folders.map((entry) => (
-                  <button
-                    key={entry.prefix}
-                    className="ink-nav-item"
-                    data-active={view === 'folder' && folder === entry.prefix}
-                    title={entry.prefix}
-                    style={{ paddingLeft: `calc(12px + ${entry.depth} * 14px)` }}
-                    onClick={() => openFolder(entry.prefix)}
-                  >
-                    <span className="ink-icon ink-icon-folder" aria-hidden />
-                    <span className="truncate">{entry.name}</span>
-                    <span className="ink-nav-count">{entry.count}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : null}
+        <FolderSection
+          folders={folders}
+          activeFolder={view === 'folder' ? folder : null}
+          onOpen={openFolder}
+          onCreate={createFolder}
+        />
+        <TagSection
+          tags={tags ?? []}
+          activeTag={view === 'tag' && activeTag ? activeTag.tag.toLowerCase() : null}
+          onOpen={openTag}
+        />
       </nav>
 
       <div className="min-h-0 flex-1 overflow-hidden py-2">
@@ -433,24 +479,39 @@ function ContextMenu({ state, onClose }: ContextMenuProps) {
       style={{ left: position.left, top: position.top }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      {state.entries.map((entry, index) =>
-        entry === 'separator' ? (
-          <div key={`sep-${index}`} className="ink-menu-sep" role="separator" />
-        ) : (
-          <button
-            key={entry.label}
-            className="ink-menu-item"
-            role="menuitem"
-            data-danger={entry.danger ? 'true' : undefined}
-            onClick={() => {
-              onClose()
-              entry.action()
-            }}
-          >
-            {entry.label}
-          </button>
-        ),
-      )}
+      {state.entries.map((entry, index) => (
+        // 用序号做 key：「移到」里文件夹可能和别的条目同名
+        <MenuEntry key={index} entry={entry} onClose={onClose} />
+      ))}
     </div>
+  )
+}
+
+/** 页面内菜单的一项；子菜单展开成一个小标题加一组缩进的条目 */
+function MenuEntry({ entry, onClose, indent = false }: { entry: ContextMenuEntry; onClose: () => void; indent?: boolean }) {
+  if (entry === 'separator') return <div className="ink-menu-sep" role="separator" />
+  if ('children' in entry) {
+    return (
+      <div role="group" aria-label={entry.label}>
+        <div className="ink-menu-label">{entry.label}</div>
+        {entry.children.map((child, index) => (
+          <MenuEntry key={index} entry={child} onClose={onClose} indent />
+        ))}
+      </div>
+    )
+  }
+  return (
+    <button
+      className="ink-menu-item"
+      role="menuitem"
+      data-danger={entry.danger ? 'true' : undefined}
+      data-indent={indent || undefined}
+      onClick={() => {
+        onClose()
+        entry.action()
+      }}
+    >
+      {entry.label}
+    </button>
   )
 }

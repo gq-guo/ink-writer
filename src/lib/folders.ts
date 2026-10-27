@@ -1,7 +1,7 @@
 /**
  * 侧边栏的文件夹列表：从文档的 dirPrefix 推出来，不单独扫描目录
  *
- * 只列出含有文档的文件夹（空文件夹、只放图片的 assets/ 不出现）；
+ * 含有文档的文件夹，加上 Rust list_folders 给出的其余文件夹（刚建的空文件夹）；只放图片的 assets/ 不出现。
  * 子文件夹排在父文件夹下面，数量包含子文件夹里的文档。
  */
 import type { DocumentMeta } from './types'
@@ -28,8 +28,16 @@ function compareSegments(a: string[], b: string[]): number {
   return a.length - b.length
 }
 
-export function listFolders(documents: DocumentMeta[]): FolderEntry[] {
+/** extraPrefixes：没有文档、也要列出的文件夹（dirPrefix 格式，如刚建的空文件夹） */
+export function listFolders(documents: DocumentMeta[], extraPrefixes: string[] = []): FolderEntry[] {
   const counts = new Map<string, number>()
+  for (const prefix of extraPrefixes) {
+    const segments = prefix.split('/').filter(Boolean)
+    for (let depth = 1; depth <= segments.length; depth++) {
+      const parent = `${segments.slice(0, depth).join('/')}/`
+      if (!counts.has(parent)) counts.set(parent, 0)
+    }
+  }
   for (const document of documents) {
     const segments = document.dirPrefix.split('/').filter(Boolean)
     for (let depth = 1; depth <= segments.length; depth++) {

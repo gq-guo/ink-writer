@@ -160,7 +160,7 @@ describe('Markdown 全格式：链接与图片', () => {
     expect(marksOf(text, 'link-text')).toEqual(['Ink 官网', '链接'])
   })
 
-  it('自动链接、引用式链接、图片保持原样，只是弱化标记', () => {
+  it('自动链接、引用式链接保持原样，只是弱化标记；图片在光标外只显示文件名', () => {
     const autolink = '自动链接 <https://example.com> 与裸链接 https://example.com/plain 。'
     expect(line(autolink).shown).toBe(autolink)
     expect(marksOf(autolink, 'url')).toContain('https://example.com')
@@ -170,8 +170,8 @@ describe('Markdown 全格式：链接与图片', () => {
     expect(marksOf(reference, 'link-text')).toEqual(['参考链接'])
 
     const image = '图片 ![替代文字](assets/photo.png)'
-    expect(line(image).shown).toBe(image)
-    expect(marksOf(image, 'link-text')).toEqual(['替代文字'])
+    expect(line(image).shown).toBe('图片 photo.png')
+    expect(marksOf(image, 'image-name')).toEqual(['photo.png'])
   })
 })
 

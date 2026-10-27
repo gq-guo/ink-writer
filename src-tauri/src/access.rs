@@ -150,6 +150,16 @@ impl Access {
         }
     }
 
+    /// 文档库里的目录（新建文件夹的父目录、移动文档的目标）：只能在库内，不接受库外文档的同级目录
+    pub fn check_library_dir(&self, dir: &Path) -> Result<(), CommandError> {
+        let normalized = normalize(dir)?;
+        if self.in_library(&normalized) && normalized.is_dir() {
+            Ok(())
+        } else {
+            Err(denied(dir))
+        }
+    }
+
     /// 导出写入：只能是导出对话框选定的那个文件
     pub fn check_export_target(&self, path: &Path) -> Result<(), CommandError> {
         if self.export_targets.contains(&normalize(path)?) {
@@ -262,6 +272,23 @@ mod tests {
         assert!(access.check_library_root(&outside).is_err());
         assert!(access.check_library_root(&library.join("sub")).is_err());
         assert!(access.check_document(Path::new("relative.md")).is_err());
+    }
+
+    #[test]
+    fn library_dir_must_be_an_existing_folder_inside_the_library() {
+        let (mut access, library, outside) = library_access("libdir");
+        fs::create_dir_all(library.join("sub")).unwrap();
+        fs::write(outside.join("opened.md"), "x").unwrap();
+        access
+            .grant_opened_file(&outside.join("opened.md"))
+            .unwrap();
+        assert!(access.check_library_dir(&library).is_ok());
+        assert!(access.check_library_dir(&library.join("sub")).is_ok());
+        // 库外打开过的文件的同级目录：新建文档可以，新建文件夹 / 移进去不行
+        assert!(access.check_document_dir(&outside).is_ok());
+        assert!(access.check_library_dir(&outside).is_err());
+        assert!(access.check_library_dir(&library.join("..")).is_err());
+        assert!(access.check_library_dir(&library.join("missing")).is_err());
     }
 
     #[test]
