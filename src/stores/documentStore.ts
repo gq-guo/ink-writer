@@ -66,6 +66,8 @@ interface DocumentState {
   createDocument: (dirPrefix?: string) => Promise<void>
   /** 在 parentPrefix（默认库根目录）下新建文件夹；成功返回新文件夹的 dirPrefix */
   createFolder: (name: string, parentPrefix?: string) => Promise<string | null>
+  /** 重命名文件夹（prefix 为 dirPrefix）；成功返回新文件夹的 dirPrefix */
+  renameFolder: (prefix: string, newName: string) => Promise<string | null>
   /** 把文档移到另一个文件夹（targetPrefix 为 "" 表示库根目录）；文档引用的相对路径图片一并复制 */
   moveDocument: (path: string, targetPrefix: string) => Promise<void>
   openDocument: (path: string, revealRange?: [number, number]) => Promise<void>
@@ -433,6 +435,79 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       })
       await get().refreshDocuments()
       return `${parent ? `${parent}/` : ''}${folderName}/`
+    } catch (error) {
+      useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
+      return null
+    }
+  },
+
+  renameFolder: async (prefix: string, newName: string) => {
+    const { libraryPath } = get()
+    const folder = prefix.replace(/\/+$/, '')
+    const name = newName.trim()
+    if (!libraryPath || !folder || !name) return null
+    const base = libraryPath.replace(/\/+$/, '')
+    const oldDir = `${base}/${folder}`
+    const oldPrefix = `${folder}/`
+    try {
+      // 和文档改名 / 移动一样排进写入队列：改名途中到期的自动保存排在后面，
+      // 等 activeDocument.path 换到新目录之后再写
+      const step = writeChain.then(async () => {
+        const renamed = await invoke<string>('rename_folder', { path: oldDir, newName: name })
+        const newFolder = renamed.startsWith(`${base}/`) ? renamed.slice(base.length + 1) : folder
+        const newPrefix = `${newFolder}/`
+        const remap = (path: string) =>
+          path === oldDir || path.startsWith(`${oldDir}/`) ? `${renamed}${path.slice(oldDir.length)}` : path
+
+        const active = get().activeDocument
+        if (active && remap(active.path) !== active.path) {
+          const renamedFile = remap(active.path).split('/').pop() ?? active.fileName
+          set({
+            activeDocument: {
+              ...active,
+              path: remap(active.path),
+              fileName: renamedFile,
+              displayTitle: displayNameOf(renamedFile),
+            },
+          })
+        }
+        if (autoNamedPath) autoNamedPath = remap(autoNamedPath)
+        return { oldPrefix, newPrefix, remap }
+      })
+      writeChain = step.then(
+        () => undefined,
+        () => undefined,
+      )
+      const { oldPrefix: prefixBefore, newPrefix, remap } = await step
+      // 先记下侧栏状态：刷新后旧文件夹没了，Sidebar 会先把视图切回「全部」，
+      // 所以「刚才正看着这个文件夹」必须在刷新前判断
+      const uiBefore = useUiStore.getState()
+      const renamedSidebarFolder =
+        uiBefore.sidebarFolder === prefixBefore || uiBefore.sidebarFolder.startsWith(prefixBefore)
+          ? `${newPrefix}${uiBefore.sidebarFolder.slice(prefixBefore.length)}`
+          : null
+      const wasViewingFolder = uiBefore.sidebarView === 'folder' && renamedSidebarFolder !== null
+
+      await get().refreshDocuments()
+
+      // 收藏里存的是路径，文件夹改名后同步，否则收藏会「丢失」
+      const settings = useSettingsStore.getState().settings
+      const favorites = settings.favorites.map(remap)
+      if (favorites.some((item, index) => item !== settings.favorites[index])) {
+        useSettingsStore.getState().update({ favorites })
+      }
+
+      // 正看着这个文件夹（或它的子文件夹）时留在原处，不要因为路径变了被踢回「全部」
+      if (renamedSidebarFolder) {
+        if (wasViewingFolder) useUiStore.getState().openFolder(renamedSidebarFolder)
+        else useUiStore.setState({ sidebarFolder: renamedSidebarFolder })
+      }
+      const lastDocumentPath = useUiStore.getState().lastDocumentPath
+      if (lastDocumentPath) {
+        const renamedPath = remap(lastDocumentPath)
+        if (renamedPath !== lastDocumentPath) useUiStore.getState().setLastDocumentPath(renamedPath)
+      }
+      return newPrefix
     } catch (error) {
       useUiStore.getState().pushToast({ message: errorMessage(error), kind: 'error' })
       return null

@@ -75,6 +75,30 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<String, CommandError> 
     Ok(target.to_string_lossy().to_string())
 }
 
+/// 重命名文件夹（只改最后一级名字，内容跟着走），返回新路径。
+///
+/// new_name 的规则和新建时一样；目标已有同名文件夹时报 folderExists。
+/// 只差大小写的改名在大小写不敏感的卷（macOS 默认）上 target.exists() 也为真，
+/// 但那是同一个目录，照常 rename —— 否则永远改不了大小写。
+pub fn rename_folder(path: &Path, new_name: &str) -> Result<String, CommandError> {
+    let name = new_name.trim();
+    if name.is_empty() || !is_single_file_name(name) {
+        return Err(CommandError::new("invalidFolderName", name));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    if !path.is_dir() {
+        return Err(CommandError::new("notFound", path.display().to_string()));
+    }
+    let target = parent.join(name);
+    if target.exists() && !is_same_file(path, &target) {
+        return Err(CommandError::new("folderExists", name));
+    }
+    fs::rename(path, &target).map_err(|e| io_message(&target, &e))?;
+    Ok(target.to_string_lossy().to_string())
+}
+
 /// 把文档移到 target_dir（保留文件名，重名时加 `-2`、`-3`……），返回新路径。
 ///
 /// 不覆盖目标位置已有的文件：先建硬链接（目标已存在时原子地失败）再删原文件，
@@ -330,6 +354,36 @@ mod tests {
                 "{bad}"
             );
         }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn renames_folder_in_place_and_rejects_bad_names() {
+        let root = temp_dir("rename");
+        fs::create_dir_all(root.join("Work/Drafts")).unwrap();
+        fs::write(root.join("Work/Drafts/a.md"), "a").unwrap();
+        fs::create_dir_all(root.join("Work/Taken")).unwrap();
+
+        let made = rename_folder(&root.join("Work/Drafts"), " 旧稿 ").unwrap();
+        assert!(Path::new(&made).is_dir());
+        assert!(root.join("Work/旧稿/a.md").is_file());
+        assert!(!root.join("Work/Drafts").exists());
+
+        assert_eq!(
+            code_of(rename_folder(&root.join("Work/旧稿"), "Taken").unwrap_err()),
+            "folderExists"
+        );
+        for bad in ["", "a/b", "..", ".hidden", "../out"] {
+            assert_eq!(
+                code_of(rename_folder(&root.join("Work/旧稿"), bad).unwrap_err()),
+                "invalidFolderName",
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            code_of(rename_folder(&root.join("Work/missing"), "x").unwrap_err()),
+            "notFound"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

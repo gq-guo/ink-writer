@@ -4,7 +4,8 @@
  * 所有内容共用一条左边缘；当前项是一块很淡的圆角底色，不用彩色选中块：
  * - 顶部：只有一个安静的 Ink 字标，不配图标（折叠用正文左下角的按钮或 ⌥\）
  * - 导航：Documents 之下的 All / Recent / Favorites，右侧是数量（点 Documents 折叠）
- * - 文件夹：标题右侧 + 新建；按层级缩进，点一个只看它（含子文件夹）里的文档，新建文档也放进去
+ * - 文件夹：标题右侧 + 在库根目录新建（可建多个并列文件夹）；按层级缩进，点一个只看它
+ *   （含子文件夹）里的文档，新建文档也放进去；右键可重命名 / 新建子文件夹
  * - 标签：库里有 #标签 时出现；点一个只看用到它的文档（见 SidebarSections）
  * - 分组：Today / Yesterday / Last 7 days / Earlier，小号淡色，不做全大写
  * - 条目：单行，标题 + 收藏星标 + 右对齐的短时间；不加文档图标
@@ -12,10 +13,11 @@
  * - 右键：App 里是 macOS 原生菜单；浏览器 / 测试里退回页面内菜单。菜单开着时被右键的条目带一圈细框（同 Finder）。
  *   「移到」子菜单把文档移到别的文件夹
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { invoke } from '@tauri-apps/api/core'
 
+import { ContextMenu, type ContextMenuState } from './ContextMenu'
 import { FolderSection, TagSection } from './SidebarSections'
 import { showNativeContextMenu, type ContextMenuEntry } from '@/lib/contextMenu'
 import { isInFolder, listFolders } from '@/lib/folders'
@@ -39,14 +41,6 @@ type ListItem =
   | { kind: 'group'; group: DateGroup }
   | { kind: 'document'; document: DocumentMeta }
 
-interface ContextMenuState {
-  x: number
-  y: number
-  entries: ContextMenuEntry[]
-}
-
-
-
 export function Sidebar() {
   const visible = useUiStore((state) => state.sidebarVisible)
   const width = useUiStore((state) => state.sidebarWidth)
@@ -63,6 +57,7 @@ export function Sidebar() {
   /** 当前文档刚保存完：自己写进去的 #标签 也要统计（保存不会刷新文档列表） */
   const justSaved = useDocumentStore((state) => state.saveState === 'saved')
   const createFolder = useDocumentStore((state) => state.createFolder)
+  const renameFolder = useDocumentStore((state) => state.renameFolder)
   const moveDocument = useDocumentStore((state) => state.moveDocument)
   const activeDocument = useDocumentStore((state) => state.activeDocument)
   const openDocument = useDocumentStore((state) => state.openDocument)
@@ -377,8 +372,10 @@ export function Sidebar() {
         <FolderSection
           folders={folders}
           activeFolder={view === 'folder' ? folder : null}
+          libraryPath={libraryPath}
           onOpen={openFolder}
           onCreate={createFolder}
+          onRename={renameFolder}
         />
         <TagSection
           tags={tags ?? []}
@@ -434,84 +431,5 @@ export function Sidebar() {
         />
       ) : null}
     </aside>
-  )
-}
-
-interface ContextMenuProps {
-  state: ContextMenuState
-  onClose: () => void
-}
-
-/** 菜单离窗口边缘至少留这么多 */
-const MENU_EDGE_GAP = 8
-
-/** 页面内右键菜单（浏览器 / 测试里用；App 里走原生菜单） */
-function ContextMenu({ state, onClose }: ContextMenuProps) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [position, setPosition] = useState({ left: state.x, top: state.y })
-
-  useEffect(() => {
-    const close = () => onClose()
-    window.addEventListener('mousedown', close)
-    window.addEventListener('blur', close)
-    return () => {
-      window.removeEventListener('mousedown', close)
-      window.removeEventListener('blur', close)
-    }
-  }, [onClose])
-
-  // 量出菜单尺寸后收进窗口：靠右 / 靠下右键时往左 / 往上翻，不被裁掉
-  useLayoutEffect(() => {
-    const menu = ref.current
-    if (!menu) return
-    const { width, height } = menu.getBoundingClientRect()
-    setPosition({
-      left: Math.max(MENU_EDGE_GAP, Math.min(state.x, window.innerWidth - width - MENU_EDGE_GAP)),
-      top: Math.max(MENU_EDGE_GAP, Math.min(state.y, window.innerHeight - height - MENU_EDGE_GAP)),
-    })
-  }, [state.x, state.y])
-
-  return (
-    <div
-      ref={ref}
-      className="ink-popover ink-menu ink-context-menu"
-      role="menu"
-      style={{ left: position.left, top: position.top }}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      {state.entries.map((entry, index) => (
-        // 用序号做 key：「移到」里文件夹可能和别的条目同名
-        <MenuEntry key={index} entry={entry} onClose={onClose} />
-      ))}
-    </div>
-  )
-}
-
-/** 页面内菜单的一项；子菜单展开成一个小标题加一组缩进的条目 */
-function MenuEntry({ entry, onClose, indent = false }: { entry: ContextMenuEntry; onClose: () => void; indent?: boolean }) {
-  if (entry === 'separator') return <div className="ink-menu-sep" role="separator" />
-  if ('children' in entry) {
-    return (
-      <div role="group" aria-label={entry.label}>
-        <div className="ink-menu-label">{entry.label}</div>
-        {entry.children.map((child, index) => (
-          <MenuEntry key={index} entry={child} onClose={onClose} indent />
-        ))}
-      </div>
-    )
-  }
-  return (
-    <button
-      className="ink-menu-item"
-      role="menuitem"
-      data-danger={entry.danger ? 'true' : undefined}
-      data-indent={indent || undefined}
-      onClick={() => {
-        onClose()
-        entry.action()
-      }}
-    >
-      {entry.label}
-    </button>
   )
 }

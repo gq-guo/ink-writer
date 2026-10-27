@@ -160,6 +160,19 @@ impl Access {
         }
     }
 
+    /// 库里的子目录（重命名文件夹）：只能是库内已存在的目录，不能是库根目录本身
+    pub fn check_library_subdir(&self, dir: &Path) -> Result<(), CommandError> {
+        let normalized = normalize(dir)?;
+        if self.in_library(&normalized)
+            && self.library.as_deref() != Some(normalized.as_path())
+            && normalized.is_dir()
+        {
+            Ok(())
+        } else {
+            Err(denied(dir))
+        }
+    }
+
     /// 导出写入：只能是导出对话框选定的那个文件
     pub fn check_export_target(&self, path: &Path) -> Result<(), CommandError> {
         if self.export_targets.contains(&normalize(path)?) {
@@ -289,6 +302,19 @@ mod tests {
         assert!(access.check_library_dir(&outside).is_err());
         assert!(access.check_library_dir(&library.join("..")).is_err());
         assert!(access.check_library_dir(&library.join("missing")).is_err());
+    }
+
+    #[test]
+    fn folder_rename_target_must_be_an_existing_subdirectory() {
+        let (access, library, outside) = library_access("subdir");
+        fs::create_dir_all(library.join("sub")).unwrap();
+        assert!(access.check_library_subdir(&library.join("sub")).is_ok());
+        // 库根目录本身不能改名
+        assert!(access.check_library_subdir(&library).is_err());
+        assert!(access
+            .check_library_subdir(&library.join("missing"))
+            .is_err());
+        assert!(access.check_library_subdir(&outside).is_err());
     }
 
     #[test]

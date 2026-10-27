@@ -389,6 +389,21 @@ fn create_folder(
     folders::create_folder(&parent, &name)
 }
 
+/// 重命名库里的文件夹；里面的文档跟着走，前端需要同步打开中的文档和收藏路径
+#[tauri::command]
+fn rename_folder(
+    state: State<'_, AccessState>,
+    path: String,
+    new_name: String,
+) -> Result<String, CommandError> {
+    let source = to_path(&path);
+    lock(&state).check_library_subdir(&source)?;
+    let new_path = folders::rename_folder(&source, &new_name)?;
+    watcher::record_self_write(&source);
+    watcher::record_self_write_tree(Path::new(&new_path));
+    Ok(new_path)
+}
+
 /// 把库里的文档移到库里的另一个文件夹（图片一并复制，见 folders::move_document）
 #[tauri::command]
 fn move_document(
@@ -679,6 +694,7 @@ pub fn run() {
             move_document,
             list_folders,
             create_folder,
+            rename_folder,
             delete_document,
             read_image,
             copy_image_bytes,
