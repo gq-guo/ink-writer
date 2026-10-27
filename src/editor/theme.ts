@@ -112,6 +112,31 @@ export const inkThemeSpec = {
     color: 'var(--secondary)',
     fontSize: '0.8em',
   },
+  // 表格（光标外渲染，见 tables.ts）：细边框、表头淡底；太宽时表格自己横向滚动，不撑宽正文栏
+  '.cm-ink-table': {
+    padding: '6px 0 14px',
+    overflowX: 'auto',
+  },
+  '.cm-ink-table table': {
+    borderCollapse: 'collapse',
+    fontSize: '0.9em',
+    lineHeight: '1.5',
+  },
+  '.cm-ink-table th, .cm-ink-table td': {
+    border: '1px solid color-mix(in srgb, var(--foreground) 14%, transparent)',
+    padding: '0.35em 0.75em',
+    textAlign: 'left',
+    verticalAlign: 'top',
+    cursor: 'text',
+    // 编辑区的 pre-wrap / break-word 会让窄列把 Project 拆成 Proje ct：单元格里按单词换行
+    whiteSpace: 'normal',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
+  },
+  '.cm-ink-table th': {
+    fontWeight: '600',
+    backgroundColor: 'var(--code-bg)',
+  },
   // 图片行在光标外只剩文件名：弱化显示，图片本身画在下一行
   '.cm-md-image-name': {
     color: 'var(--secondary)',
