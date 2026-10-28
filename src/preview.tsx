@@ -230,7 +230,18 @@ async function renderShell(): Promise<void> {
   // ?doc=formats：加载 fixtures/all-formats.md，逐项核对 Markdown 全格式的渲染
   const FORMATS =
     params.get('doc') === 'formats' ? (await import('../fixtures/all-formats.md?raw')).default : null
-  const CONTENT = FORMATS ?? [
+  // ?doc=showcase：README 截图用的示例文档（fixtures/showcase.md），侧栏文档名也换成中文
+  const SHOWCASE =
+    params.get('doc') === 'showcase' ? (await import('../fixtures/showcase.md?raw')).default : null
+  const SHOWCASE_TITLES = ['慢一点写', '旅行笔记', '读书摘录', '选题清单', '2024 年终总结']
+  const DOCS = SHOWCASE
+    ? MOCK_DOCS.map((doc, index) => {
+        const title = SHOWCASE_TITLES[index] ?? doc.displayTitle
+        const dirPrefix = doc.dirPrefix.replace('Archive/', '归档/').replace('Project/', '项目/')
+        return { ...doc, displayTitle: title, fileName: `${title}.md`, dirPrefix, path: `/library/${dirPrefix}${title}.md` }
+      })
+    : MOCK_DOCS
+  const CONTENT = FORMATS ?? SHOWCASE ?? [
     ...(noH1 ? [] : ['# Hello World', '']),
     'This is my first document in Ink.',
     '',
@@ -255,6 +266,11 @@ async function renderShell(): Promise<void> {
     import('react-dom/client'),
   ])
 
+  // ?locale=zh-CN|en：界面语言（默认跟随系统）
+  const localeParam = params.get('locale')
+  const PREVIEW_LOCALE = localeParam === 'zh-CN' || localeParam === 'en' ? localeParam : 'system'
+  const { syncLocale } = await import('./lib/i18n')
+
   useSettingsStore.setState({
     hydrated: true,
     settings: {
@@ -268,18 +284,19 @@ async function renderShell(): Promise<void> {
       typewriterMode: false,
       spellcheck: true,
       showMarkup: false,
-      favorites: ['/library/Blog Post.md'],
-      locale: 'system',
+      favorites: [DOCS[1]!.path],
+      locale: PREVIEW_LOCALE,
     },
   })
+  syncLocale(PREVIEW_LOCALE)
   useUiStore.setState({ sidebarVisible: true, sidebarWidth: 240, sidebarView: 'all' })
   useDocumentStore.setState({
-    documents: MOCK_DOCS,
+    documents: DOCS,
     activeDocument: {
-      ...MOCK_DOCS[0]!,
+      ...DOCS[0]!,
       content: CONTENT,
       originalEncoding: 'utf-8',
-      displayTitle: 'Hello World',
+      displayTitle: DOCS[0]!.displayTitle,
       openSeq: 1,
     },
     saveState: 'idle',
