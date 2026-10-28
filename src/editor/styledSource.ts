@@ -4,11 +4,13 @@
  * 原则：语法符号只弱化不删改；标题、加粗等做视觉增强。文本与磁盘文件一字不差。
  *
  * 标记隐藏（设置「显示 Markdown 标记」关闭时，默认）：光标不在的行隐藏
- * 标题的 # 、粗斜体的 * _、删除线的 ~~、行内代码的反引号、行内链接的 [ ](url)、转义的 \；
+ * 标题的 # 、粗斜体的 * _、删除线的 ~~、行内代码的反引号、行内链接的 [ ](url)、转义的 \、
+ * 引用的 > 、自动链接的 < >、引用式链接的 [ ][label]、<kbd> 标签；
+ * 无序列表的 - * + 换成圆点；任务项的 `- [ ] ` 换成复选框（见 tasks.ts）；
  * 图片 `![alt](assets/x.png)` 只留文件名 `x.png`（图片本身画在下一行，见 inlineImages.ts）；
  * 光标所在行（含选区覆盖的行）照常显示全部标记，编辑时看到的仍是源码。
- * 列表、引用、引用式链接的标记不隐藏（只弱化）；任务项例外：`- [ ] ` 换成复选框（见 tasks.ts）。
- * 表格：光标不在表格里时整张换成渲染好的表格（见 tables.ts）。
+ * 块级语法按整块算：光标不在代码块里时隐藏围栏行（语言名留作右上角标签）；
+ * 表格整张换成渲染好的表格（见 tables.ts）。
  *
  * 块级样式：遍历 syntaxTree(view.state) 的可见区间（view.visibleRanges）
  * 行内样式：同一插件对可见区间内的行内节点产出 Decoration.mark
@@ -25,7 +27,7 @@ import {
   type Range,
 } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
-import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 
 import { tagRangesIn } from './tags'
 import { TASK_TOGGLE_EVENT, TaskCheckboxWidget, taskMarkerOf } from './tasks'
@@ -144,6 +146,44 @@ function contentBetweenMarkers(node: SyntaxNode): { from: number; to: number } |
   return { from: first.to, to: last.from }
 }
 
+/** 光标外的无序列表标记：按嵌套层级 • ◦ ▪ 轮换 */
+const BULLETS = ['•', '◦', '▪']
+
+class BulletWidget extends WidgetType {
+  constructor(readonly symbol: string) {
+    super()
+  }
+
+  eq(other: BulletWidget): boolean {
+    return other.symbol === this.symbol
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-md-bullet'
+    span.textContent = this.symbol
+    return span
+  }
+}
+
+/** 光标外的代码块：开头的围栏行只剩语言名 */
+class CodeLanguageWidget extends WidgetType {
+  constructor(readonly language: string) {
+    super()
+  }
+
+  eq(other: CodeLanguageWidget): boolean {
+    return other.language === this.language
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-md-code-lang'
+    span.textContent = this.language
+    return span
+  }
+}
+
 interface Builder {
   marks: Range<Decoration>[]
   lines: Map<number, Set<string>>
@@ -205,6 +245,12 @@ export function buildDecorations(
     if (!concealedLine(line) || state.doc.lineAt(to).number !== line) return
     builder.marks.push(Decoration.replace({}).range(from, to))
   }
+  /** 整块隐藏标记（代码块等）：光标 / 选区不在 [fromLine, toLine] 任何一行 */
+  const concealedBlock = (fromLine: number, toLine: number) =>
+    activeLines !== null && ![...activeLines].some((line) => line >= fromLine && line <= toLine)
+  /** 引用的层数（每个 Blockquote 只算一次：多个可见区间可能各进一次） */
+  const quoteDepth = new Map<number, number>()
+  const seenQuotes = new Set<string>()
 
   /** 链接 / 图片的文字：[ 与 ] 之间（不含后面的 (url) 或 [label]） */
   const linkText = (node: SyntaxNode): { open: SyntaxNode; close: SyntaxNode } | null => {
@@ -302,6 +348,12 @@ export function buildDecorations(
             if (name === 'HeaderMark') concealHeaderMark(node)
             else if (name === 'EmphasisMark' || name === 'StrikethroughMark') conceal(node.from, node.to)
             else if (name === 'CodeMark' && node.parent?.name === 'InlineCode') conceal(node.from, node.to)
+            // 引用的 > 连同后面一个空格（层数由竖线表达）
+            else if (name === 'QuoteMark') {
+              conceal(node.from, state.doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to)
+            }
+            // 自动链接 <https://…> 的尖括号
+            else if (name === 'LinkMark' && node.parent?.name === 'Autolink') conceal(node.from, node.to)
             break
           }
           case 'StrongEmphasis': {
@@ -325,7 +377,12 @@ export function buildDecorations(
             break
           }
           case 'Blockquote': {
-            addLineRangeClass(node.from, node.to, 'cm-md-quote')
+            const key = `${node.from}:${node.to}`
+            if (seenQuotes.has(key)) break
+            seenQuotes.add(key)
+            const startLine = state.doc.lineAt(node.from).number
+            const endLine = state.doc.lineAt(node.to).number
+            for (let ln = startLine; ln <= endLine; ln++) quoteDepth.set(ln, (quoteDepth.get(ln) ?? 0) + 1)
             break
           }
           case 'ListItem': {
@@ -337,7 +394,10 @@ export function buildDecorations(
             if (mark) {
               const line = state.doc.lineAt(node.from)
               if (line.from > mark.from) break
-              const prefix = line.text.slice(0, mark.from - line.from)
+              // 引用里的列表：行首的「> 」不算缩进（光标外已隐藏），单独计宽
+              const before = line.text.slice(0, mark.from - line.from)
+              const quotePrefix = /^(?:[ \t]*>[ \t]?)*/.exec(before)?.[0] ?? ''
+              const prefix = before.slice(quotePrefix.length)
               let spaces = 0
               let others = 0
               for (const ch of prefix) {
@@ -346,7 +406,8 @@ export function buildDecorations(
                 else others += 1
               }
               for (const run of prefix.matchAll(/[ \t]+/g)) {
-                addMark(line.from + run.index, line.from + run.index + run[0].length, 'cm-md-list-lead')
+                const start = line.from + quotePrefix.length + run.index
+                addMark(start, start + run[0].length, 'cm-md-list-lead')
               }
               const markWidth = state.doc.sliceString(mark.from, mark.to).length + 1
               const lead = `${(spaces * LIST_LEAD_SPACE_EM).toFixed(2)}em + ${others}ch`
@@ -367,23 +428,61 @@ export function buildDecorations(
                   ),
                 )
               }
-              const hang = `${lead} + ${hanging ? CHECKBOX_HANG : `${markWidth}ch`}`
-              // 引用里的列表：行内 style 会盖掉 .cm-md-quote 的左内边距，这里补回来
-              const quote = hasAncestor(node, 'Blockquote') ? `${QUOTE_PADDING_PX}px + ` : ''
-              builder.lineStyles.set(
-                line.number,
-                `padding-left:calc(${quote}${lead});text-indent:calc(-1 * (${hang}))`,
-              )
+              const markHang = hanging ? CHECKBOX_HANG : `${markWidth}ch`
+              const hang = `${lead} + ${markHang}`
+              const depth = Math.min(ancestorCount(node, 'Blockquote'), MAX_QUOTE_DEPTH)
+              if (depth > 0) {
+                // 引用里的列表：标记留在竖线右边，不外悬到竖线外；行内 style 会盖掉引用的左内边距，这里补回来
+                const quoteWidth = concealedLine(line.number) ? '0ch' : `${quotePrefix.length}ch`
+                builder.lineStyles.set(
+                  line.number,
+                  `padding-left:calc(${depth * QUOTE_PADDING_PX}px + ${hang});text-indent:calc(-1 * (${quoteWidth} + ${hang}))`,
+                )
+              } else {
+                builder.lineStyles.set(line.number, `padding-left:calc(${lead});text-indent:calc(-1 * (${hang}))`)
+              }
               if (hanging) break
               addMark(mark.from, mark.to, 'cm-md-mark')
               if (state.doc.sliceString(mark.to, mark.to + 1) === ' ') addHangBox(mark.from, mark.to + 1, markWidth)
+              // 光标外的无序列表：- * + 换成圆点
+              const markText = state.doc.sliceString(mark.from, mark.to)
+              if (concealedLine(line.number) && /^[-*+]$/.test(markText)) {
+                const level = Math.max(1, ancestorCount(node, 'BulletList'))
+                builder.marks.push(
+                  Decoration.replace({ widget: new BulletWidget(BULLETS[(level - 1) % BULLETS.length]!) }).range(
+                    mark.from,
+                    mark.to,
+                  ),
+                )
+              }
             }
             break
           }
           case 'FencedCode': {
             addLineRangeClass(node.from, node.to, 'cm-md-codeblock')
-            addLineClass(state.doc.lineAt(node.from).number, 'cm-md-codeblock-start')
-            addLineClass(state.doc.lineAt(node.to).number, 'cm-md-codeblock-end')
+            const startLine = state.doc.lineAt(node.from)
+            const endLine = state.doc.lineAt(node.to)
+            addLineClass(startLine.number, 'cm-md-codeblock-start')
+            addLineClass(endLine.number, 'cm-md-codeblock-end')
+            // 光标不在代码块里：围栏行只留语言名（右上角小标签），结尾围栏行留空当下边距
+            if (!concealedBlock(startLine.number, endLine.number)) break
+            const fences = children.filter((child) => child.name === 'CodeMark')
+            const open = fences[0]
+            if (!open || state.doc.lineAt(open.from).number !== startLine.number) break
+            const info = children.find((child) => child.name === 'CodeInfo')
+            const language = info ? state.doc.sliceString(info.from, info.to).trim() : ''
+            builder.marks.push(
+              (language ? Decoration.replace({ widget: new CodeLanguageWidget(language) }) : Decoration.replace({})).range(
+                startLine.from,
+                startLine.to,
+              ),
+            )
+            addLineClass(startLine.number, 'cm-md-fence')
+            const close = fences[fences.length - 1]
+            if (close && close !== open && state.doc.lineAt(close.from).number === endLine.number) {
+              builder.marks.push(Decoration.replace({}).range(endLine.from, endLine.to))
+              addLineClass(endLine.number, 'cm-md-fence')
+            }
             break
           }
           case 'CodeText': {
@@ -396,7 +495,8 @@ export function buildDecorations(
             if (!text) break
             addMark(text.open.to, text.close.from, 'cm-md-link-text')
             // 行内链接 [文字](url)：光标外只留下划线的文字；引用式链接保持原样
-            if (name === 'Link' && children.some((child) => child.name === 'URL')) {
+            // 引用式链接 [文字][label] / [文字][]：同样只留文字（定义行 [label]: url 不动）
+            if (name === 'Link' && children.some((child) => child.name === 'URL' || child.name === 'LinkLabel')) {
               conceal(text.open.from, text.open.to)
               conceal(text.close.from, node.to)
             }
@@ -430,8 +530,20 @@ export function buildDecorations(
             }
             break
           }
+          case 'HTMLTag': {
+            addMark(node.from, node.to, 'cm-md-mark')
+            // <kbd>⌘</kbd>：画成按键，光标外隐藏标签（其余 HTML 原样显示，不渲染）
+            if (!/^<kbd>$/i.test(state.doc.sliceString(node.from, node.to))) break
+            let close: SyntaxNode | null = node.nextSibling
+            while (close && close.name !== 'HTMLTag') close = close.nextSibling
+            if (!close || !/^<\/kbd>$/i.test(state.doc.sliceString(close.from, close.to))) break
+            if (state.doc.lineAt(close.from).number !== state.doc.lineAt(node.from).number) break
+            addMark(node.to, close.from, 'cm-md-kbd')
+            conceal(node.from, node.to)
+            conceal(close.from, close.to)
+            break
+          }
           case 'TableDelimiter':
-          case 'HTMLTag':
           case 'HTMLBlock':
           case 'CommentBlock':
           case 'Comment': {
@@ -452,7 +564,10 @@ export function buildDecorations(
             break
           }
           case 'URL': {
-            addMark(node.from, node.to, 'cm-md-url')
+            // 链接 / 图片 / 定义行里的地址弱化；自动链接与裸链接本身就是链接文字
+            const parent = node.parent?.name
+            const inLink = parent === 'Link' || parent === 'Image' || parent === 'LinkReference'
+            addMark(node.from, node.to, inLink ? 'cm-md-url' : 'cm-md-link-text')
             break
           }
           case 'HorizontalRule': {
@@ -467,6 +582,12 @@ export function buildDecorations(
         return true
       },
     })
+  }
+
+  // 引用：每一层一条竖线（cm-md-quote-N 画 N 条）
+  for (const [lineNumber, depth] of quoteDepth) {
+    addLineClass(lineNumber, 'cm-md-quote')
+    addLineClass(lineNumber, `cm-md-quote-${Math.min(depth, MAX_QUOTE_DEPTH)}`)
   }
 
   // 行内标签 #tag（规则见 tags.ts）
@@ -548,14 +669,17 @@ function isParagraphLine(state: EditorState, lineNumber: number): boolean {
 const LIST_LEAD_SPACE_EM = 0.6
 /** 光标外任务项的复选框外悬宽度（与 theme 里 .cm-md-checkbox-hang 的宽度一致） */
 const CHECKBOX_HANG = '1.5em'
-/** 与 theme.ts 的 .cm-md-quote paddingLeft 一致 */
+/** 与 theme.ts 的 .cm-md-quote 每层左内边距一致 */
 const QUOTE_PADDING_PX = 16
+/** 竖线最多画几层（theme.ts 里有 .cm-md-quote-1 … -4） */
+const MAX_QUOTE_DEPTH = 4
 
-function hasAncestor(node: SyntaxNode, name: string): boolean {
+function ancestorCount(node: SyntaxNode, name: string): number {
+  let count = 0
   for (let parent = node.parent; parent; parent = parent.parent) {
-    if (parent.name === name) return true
+    if (parent.name === name) count += 1
   }
-  return false
+  return count
 }
 
 /** 可见区间 ± pad 行 */

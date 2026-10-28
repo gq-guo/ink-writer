@@ -242,8 +242,8 @@ describe('光标外隐藏 Markdown 标记', () => {
   })
 
   it('光标所在行显示全部标记', () => {
-    // 光标在标题行：标题的 # 不隐藏，列表行照常隐藏
-    expect(concealed(DOC, 3)).toEqual(['`', '`', '**', '**', '~~', '~~'])
+    // 光标在标题行：标题的 # 不隐藏，列表行照常隐藏；光标不在代码块里，围栏行也隐藏
+    expect(concealed(DOC, 3)).toEqual(['`', '`', '**', '**', '~~', '~~', '```', '```'])
   })
 
   it('设置为显示标记时不隐藏任何字符', () => {
@@ -275,6 +275,34 @@ describe('光标外隐藏 Markdown 标记', () => {
     // 用户点进标题行后显示源码
     const clicked = opened.update({ selection: { anchor: 2 }, userEvent: 'select.pointer' }).state
     expect(hiddenIn(clicked)).toEqual([])
+  })
+
+  it('光标在代码块的任一行：两条围栏都显示', () => {
+    const doc = '正文\n\n```ts\nconst a = 1\n```'
+    expect(concealed(doc, doc.indexOf('const'))).toEqual([])
+    expect(concealed(doc, 1)).toEqual(['```ts', '```'])
+  })
+
+  it('没有结尾围栏的代码块只隐藏开头一行', () => {
+    expect(concealed('正文\n\n```\n代码', 1)).toEqual(['```'])
+  })
+
+  it('无序列表按层级换成 • ◦ ▪，光标所在行保留 -', () => {
+    const doc = '- 一\n  - 二\n    - 三\n\n正文'
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: [markdown({ base: markdownLanguage }), concealMarkupFacet.of(true)],
+    })
+    const symbols: string[] = []
+    const iter = buildDecorations(state, [{ from: 0, to: doc.length }]).iter()
+    while (iter.value) {
+      const widget = (iter.value as { spec?: { widget?: { symbol?: string } } }).spec?.widget
+      if (widget?.symbol) symbols.push(widget.symbol)
+      iter.next()
+    }
+    expect(symbols).toEqual(['•', '◦', '▪'])
+    expect(concealed(doc, 1)).toEqual(['-', '-'])
   })
 
   it('只有 # 没有文字的标题不隐藏（否则整行看不见）', () => {
@@ -322,6 +350,16 @@ describe('标记外悬（列表符号 / 标题 #）', () => {
     const style = lineStyles('- 一级\n  - 二级', 0).get(2)!
     expect(style).toContain('padding-left:calc(1.20em + 0ch)')
     expect(style).toContain('text-indent:calc(-1 * (1.20em + 0ch + 2ch))')
+  })
+
+  it('引用里的列表：标记留在竖线右边，光标外不再为隐藏的「> 」留宽', () => {
+    const doc = '> - 引用里的列表\n\n正文'
+    expect(lineStyles(doc, doc.length).get(1)).toBe(
+      'padding-left:calc(16px + 0.00em + 0ch + 2ch);text-indent:calc(-1 * (0ch + 0.00em + 0ch + 2ch))',
+    )
+    expect(lineStyles(doc, 3).get(1)).toBe(
+      'padding-left:calc(16px + 0.00em + 0ch + 2ch);text-indent:calc(-1 * (2ch + 0.00em + 0ch + 2ch))',
+    )
   })
 
   it('有序列表按标记长度外悬', () => {

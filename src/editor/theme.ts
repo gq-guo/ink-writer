@@ -147,6 +147,20 @@ export const inkThemeSpec = {
     textDecorationColor: 'color-mix(in srgb, var(--foreground) 30%, transparent)',
     textUnderlineOffset: '3px',
   },
+  // 光标外的无序列表圆点：与原来的 - 同宽（外悬盒里居中），弱化色
+  '.cm-md-bullet': {
+    color: 'var(--secondary)',
+  },
+  // <kbd>⌘</kbd>：按键样式
+  '.cm-md-kbd': {
+    fontFamily: 'var(--code-font)',
+    fontSize: '0.8em',
+    padding: '0.1em 0.4em',
+    border: '1px solid var(--border)',
+    borderBottomWidth: '2px',
+    borderRadius: '4px',
+    backgroundColor: 'var(--code-bg)',
+  },
   '.cm-md-bold': {
     fontWeight: '600',
   },
@@ -262,11 +276,17 @@ export const inkThemeSpec = {
     color: 'color-mix(in srgb, var(--foreground) 65%, var(--secondary))',
     paddingTop: '0.8em',
   },
+  // 引用：每层一条 2px 竖线、16px 缩进（层数见 styledSource 的 cm-md-quote-N）
   '.cm-md-quote': {
-    borderLeft: '2px solid var(--border)',
     paddingLeft: '16px',
     color: 'color-mix(in srgb, var(--foreground) 80%, var(--secondary))',
+    backgroundImage: 'repeating-linear-gradient(to right, var(--border) 0 2px, transparent 2px 16px)',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '16px 100%',
   },
+  '.cm-md-quote-2': { paddingLeft: '32px', backgroundSize: '32px 100%' },
+  '.cm-md-quote-3': { paddingLeft: '48px', backgroundSize: '48px 100%' },
+  '.cm-md-quote-4': { paddingLeft: '64px', backgroundSize: '64px 100%' },
   '.cm-md-hr': {
     color: 'transparent',
   },
@@ -285,6 +305,16 @@ export const inkThemeSpec = {
     borderTopLeftRadius: '3px',
     borderTopRightRadius: '3px',
     paddingTop: '6px',
+  },
+  // 光标外的围栏行：只剩右上角的语言名，行高压低当作上下边距
+  '.cm-md-fence': {
+    fontSize: '0.7em',
+    lineHeight: '1.4',
+    textAlign: 'right',
+  },
+  '.cm-md-code-lang': {
+    color: 'var(--secondary)',
+    letterSpacing: '0.04em',
   },
   '.cm-md-codeblock-end': {
     borderBottomLeftRadius: '3px',

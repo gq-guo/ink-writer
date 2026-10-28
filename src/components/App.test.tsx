@@ -79,14 +79,12 @@ describe('App 启动流程（spec §3 / W1 / W7）', () => {
       expect(container.querySelector('.cm-md-h1')).toBeTruthy()
     })
 
-    // 语法符号被弱化
-    expect(container.querySelector('.cm-md-mark')).toBeTruthy()
     // 加粗内容真加粗
     expect(container.querySelector('.cm-md-bold')).toBeTruthy()
     // 行内代码有等宽样式
     expect(container.querySelector('.cm-md-code')).toBeTruthy()
-    // 列表标记被弱化
-    expect(container.querySelector('.cm-md-listmark, .cm-md-mark')).toBeTruthy()
+    // 光标外的列表标记换成圆点
+    expect(container.querySelector('.cm-md-bullet')?.textContent).toBe('•')
   })
 
   it('切换到深色主题时，编辑器根节点带上 CM6 的 dark 变体 class', async () => {
