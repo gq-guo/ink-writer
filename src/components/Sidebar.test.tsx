@@ -51,7 +51,7 @@ describe('Sidebar（spec W2）', () => {
     // 每个用例自己定语言，不依赖上一个用例切过的 locale
     syncLocale('zh-CN')
     useUiStore.setState({ sidebarVisible: true, sidebarWidth: 240 })
-    useDocumentStore.setState({ documents, activeDocument: null })
+    useDocumentStore.setState({ documents, folders: [], activeDocument: null })
   })
 
   it('按 今天 / 昨天 / 更早 分组渲染（英文界面为 Today / Yesterday / Earlier）', () => {
@@ -221,7 +221,7 @@ describe('Sidebar（spec W2）', () => {
     expect(screen.getByRole('button', { name: '新建文件夹' })).toBeInTheDocument()
   })
 
-  it('点 + 新建文件夹：输入名字回车后建在库根目录，并切到这个文件夹', async () => {
+  it('点 + 新建文件夹：输入名字回车后建在库根目录，不自动切进去', async () => {
     useUiStore.setState({ sidebarView: 'all', sidebarFolder: '' })
     useDocumentStore.setState({ libraryPath: '/library', folders: [] })
     invokeMock.mockImplementation(async (command: string) => {
@@ -234,14 +234,18 @@ describe('Sidebar（spec W2）', () => {
     const input = screen.getByPlaceholderText('文件夹名称')
     fireEvent.change(input, { target: { value: 'Drafts' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await vi.waitFor(() => expect(useUiStore.getState().sidebarFolder).toBe('Drafts/'))
-    expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library', name: 'Drafts' })
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library', name: 'Drafts' }),
+    )
     expect(invokeMock.mock.calls.filter((call) => call[0] === 'create_folder')).toHaveLength(1)
+    // 建完留在原处，新建文档不会被动跟着进这个文件夹
+    expect(useUiStore.getState().sidebarView).toBe('all')
+    expect(useUiStore.getState().sidebarFolder).toBe('')
     // 空文件夹也列出来（来自 list_folders），数量 0
-    expect(screen.getByTitle('Drafts/').querySelector('.ink-nav-count')?.textContent).toBe('0')
+    expect((await screen.findByTitle('Drafts/')).querySelector('.ink-nav-count')?.textContent).toBe('0')
   })
 
-  it('正看着某个文件夹时，新建的文件夹建在它里面', async () => {
+  it('正看着某个文件夹时点 +：仍然建在库根目录，可以建多个并列的父文件夹', async () => {
     useUiStore.setState({ sidebarView: 'folder', sidebarFolder: 'sub/' })
     useDocumentStore.setState({ libraryPath: '/library' })
     invokeMock.mockResolvedValue([])
@@ -251,8 +255,53 @@ describe('Sidebar（spec W2）', () => {
     fireEvent.change(input, { target: { value: '草稿' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library', name: '草稿' }),
+    )
+  })
+
+  it('右键文件夹「新建子文件夹」：建在它里面', async () => {
+    useUiStore.setState({ sidebarView: 'all', sidebarFolder: '' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockResolvedValue([])
+    render(<Sidebar />)
+    fireEvent.contextMenu(screen.getByTitle('sub/'))
+    fireEvent.click(await screen.findByText('新建子文件夹…'))
+    const input = screen.getByPlaceholderText('文件夹名称')
+    fireEvent.change(input, { target: { value: '草稿' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await vi.waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith('create_folder', { parent: '/library/sub', name: '草稿' }),
     )
+  })
+
+  it('右键文件夹「重命名…」：原地改名，正在看的文件夹也跟着换路径', async () => {
+    useUiStore.setState({ sidebarView: 'folder', sidebarFolder: 'sub/' })
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'rename_folder') return '/library/drafts'
+      if (command === 'list_documents') return [{ ...documents[2], path: '/library/drafts/c.md', dirPrefix: 'drafts/' }]
+      if (command === 'list_folders') return ['drafts/']
+      return undefined
+    })
+    render(<Sidebar />)
+    fireEvent.contextMenu(screen.getByTitle('sub/'))
+    fireEvent.click(await screen.findByText('重命名…'))
+    const input = screen.getByRole('textbox', { name: 'sub' })
+    fireEvent.change(input, { target: { value: 'drafts' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('rename_folder', { path: '/library/sub', newName: 'drafts' }),
+    )
+    await vi.waitFor(() => expect(screen.getByTitle('drafts/')).toBeInTheDocument())
+    expect(useUiStore.getState().sidebarFolder).toBe('drafts/')
+  })
+
+  it('双击文件夹也能改名', async () => {
+    useDocumentStore.setState({ libraryPath: '/library' })
+    invokeMock.mockResolvedValue([])
+    render(<Sidebar />)
+    fireEvent.doubleClick(screen.getByTitle('sub/'))
+    expect(screen.getByRole('textbox', { name: 'sub' })).toHaveValue('sub')
   })
 
   it('右键「移到」把文档移到别的文件夹', async () => {

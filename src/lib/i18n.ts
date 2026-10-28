@@ -52,6 +52,7 @@ const zh: Record<string, string> = {
   'sidebar.context.addFavorite': '加入收藏',
   'sidebar.context.removeFavorite': '取消收藏',
   'sidebar.context.rename': '重命名…',
+  'sidebar.context.newSubfolder': '新建子文件夹…',
   'sidebar.context.reveal': '在访达中显示',
   'sidebar.context.trash': '移到废纸篓',
 
@@ -337,6 +338,7 @@ const en: Record<string, string> = {
   'sidebar.context.addFavorite': 'Add to Favorites',
   'sidebar.context.removeFavorite': 'Remove from Favorites',
   'sidebar.context.rename': 'Rename…',
+  'sidebar.context.newSubfolder': 'New Subfolder…',
   'sidebar.context.reveal': 'Reveal in Finder',
   'sidebar.context.trash': 'Move to Trash',
 

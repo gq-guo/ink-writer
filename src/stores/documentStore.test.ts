@@ -99,6 +99,113 @@ describe('把文档移到别的文件夹', () => {
     expect(useSettingsStore.getState().settings.favorites).toEqual(['/library/Work/Note-2.md'])
   })
 
+  it('文件夹改名：活动文档、收藏、侧栏和上次打开的文档都换到新路径', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'hello', encoding: 'utf-8', mtime: 1000, size: 5, lineEnding: 'lf' }
+        case 'rename_folder':
+          return '/library/Archive'
+        case 'list_documents':
+        case 'list_folders':
+          return []
+        default:
+          return undefined
+      }
+    })
+    const { documentStore } = await loadStores()
+    const { useSettingsStore } = await import('@/stores/settingsStore')
+    const { useUiStore } = await import('@/stores/uiStore')
+    useSettingsStore.setState((state) => ({
+      settings: { ...state.settings, favorites: ['/library/Work/Note.md', '/library/Other.md'] },
+    }))
+    useUiStore.setState({
+      sidebarView: 'folder',
+      sidebarFolder: 'Work/',
+      lastDocumentPath: '/library/Work/Note.md',
+    })
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Work/Note.md')
+    const before = documentStore.getState().activeDocument!
+
+    const prefix = await documentStore.getState().renameFolder('Work/', ' Archive ')
+
+    expect(invokeMock).toHaveBeenCalledWith('rename_folder', { path: '/library/Work', newName: 'Archive' })
+    expect(prefix).toBe('Archive/')
+    const after = documentStore.getState().activeDocument!
+    expect(after.path).toBe('/library/Archive/Note.md')
+    expect(after.fileName).toBe('Note.md')
+    // 只是目录换名：编辑器不重建，光标 / 撤销历史不受影响
+    expect(after.openSeq).toBe(before.openSeq)
+    expect(useSettingsStore.getState().settings.favorites).toEqual([
+      '/library/Archive/Note.md',
+      '/library/Other.md',
+    ])
+    expect(useUiStore.getState().sidebarFolder).toBe('Archive/')
+    expect(useUiStore.getState().lastDocumentPath).toBe('/library/Archive/Note.md')
+  })
+
+  it('文件夹改名返回的路径带结尾 / 时，不拼出 // 路径', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'hello', encoding: 'utf-8', mtime: 1000, size: 5, lineEnding: 'lf' }
+        case 'rename_folder':
+          return '/library/Archive/'
+        case 'list_documents':
+        case 'list_folders':
+          return []
+        default:
+          return undefined
+      }
+    })
+    const { documentStore } = await loadStores()
+    const { useSettingsStore } = await import('@/stores/settingsStore')
+    const { useUiStore } = await import('@/stores/uiStore')
+    useSettingsStore.setState((state) => ({
+      settings: { ...state.settings, favorites: ['/library/Work/Note.md'] },
+    }))
+    useUiStore.setState({ sidebarFolder: 'Work/', lastDocumentPath: '/library/Work/Note.md' })
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Work/Note.md')
+
+    const prefix = await documentStore.getState().renameFolder('Work/', 'Archive')
+
+    expect(prefix).toBe('Archive/')
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Archive/Note.md')
+    expect(useSettingsStore.getState().settings.favorites).toEqual(['/library/Archive/Note.md'])
+    expect(useUiStore.getState().sidebarFolder).toBe('Archive/')
+    expect(useUiStore.getState().lastDocumentPath).toBe('/library/Archive/Note.md')
+  })
+
+  it('文件夹名不合法（如 Archive/）被 Rust 拒绝：提示错误，路径都不动', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      switch (command) {
+        case 'read_document':
+          return { content: 'hello', encoding: 'utf-8', mtime: 1000, size: 5, lineEnding: 'lf' }
+        case 'rename_folder':
+          throw { code: 'invalidFolderName', message: 'Archive/' }
+        case 'list_documents':
+        case 'list_folders':
+          return []
+        default:
+          return undefined
+      }
+    })
+    const { documentStore } = await loadStores()
+    const { useUiStore } = await import('@/stores/uiStore')
+    useUiStore.setState({ sidebarFolder: 'Work/', toasts: [] })
+    documentStore.setState({ libraryPath: '/library' })
+    await documentStore.getState().openDocument('/library/Work/Note.md')
+
+    const prefix = await documentStore.getState().renameFolder('Work/', 'Archive/')
+
+    expect(prefix).toBeNull()
+    expect(documentStore.getState().activeDocument!.path).toBe('/library/Work/Note.md')
+    expect(useUiStore.getState().sidebarFolder).toBe('Work/')
+    expect(useUiStore.getState().toasts.some((toast) => toast.kind === 'error')).toBe(true)
+  })
+
   it('新建文件夹：父目录拼成库内路径，返回新文件夹的 dirPrefix', async () => {
     invokeMock.mockImplementation(async (command: string) =>
       command === 'list_documents' || command === 'list_folders' ? [] : '/library/Work/Drafts',

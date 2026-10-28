@@ -1421,8 +1421,9 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   max-width: 280px;
 }
 
-/* 右键菜单开着时，被右键的条目带一圈细框（同 Finder），看得出菜单作用在哪一篇 */
-.ink-doc-item[data-context='true'] {
+/* 右键菜单开着时，被右键的条目带一圈细框（同 Finder），看得出菜单作用在哪一篇 / 哪个文件夹 */
+.ink-doc-item[data-context='true'],
+.ink-nav-item[data-context='true'] {
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--foreground) 40%, transparent);
 }
 

@@ -61,10 +61,19 @@ fn visit(root: &Path, dir: &Path, out: &mut Vec<String>) -> std::io::Result<bool
     Ok(has_document)
 }
 
-/// 在 parent 下新建文件夹；name 只能是单个名字（不含 `/`、`..`，不以 `.` 开头）
+/// 文件夹名只能是单个名字：不含 `/`、`\`、`\0`、`..`，不以 `.` 开头。
+///
+/// 光靠 is_single_file_name 不够：Path::components 会吞掉结尾的 `/`，
+/// `Archive/`、`Archive/.` 也算单个分量，rename 能成功，返回的路径却带着 `/`，
+/// 前端拼出 `Archive//Note.md` 这样的路径，和 watcher 事件对不上
+fn is_valid_folder_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains(['/', '\\', '\0']) && is_single_file_name(name)
+}
+
+/// 在 parent 下新建文件夹；name 的规则见 is_valid_folder_name
 pub fn create_folder(parent: &Path, name: &str) -> Result<String, CommandError> {
     let name = name.trim();
-    if name.is_empty() || !is_single_file_name(name) {
+    if !is_valid_folder_name(name) {
         return Err(CommandError::new("invalidFolderName", name));
     }
     let target = parent.join(name);
@@ -72,6 +81,30 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<String, CommandError> 
         return Err(CommandError::new("folderExists", name));
     }
     fs::create_dir(&target).map_err(|e| io_message(&target, &e))?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+/// 重命名文件夹（只改最后一级名字，内容跟着走），返回新路径。
+///
+/// new_name 的规则和新建时一样；目标已有同名文件夹时报 folderExists。
+/// 只差大小写的改名在大小写不敏感的卷（macOS 默认）上 target.exists() 也为真，
+/// 但那是同一个目录，照常 rename —— 否则永远改不了大小写。
+pub fn rename_folder(path: &Path, new_name: &str) -> Result<String, CommandError> {
+    let name = new_name.trim();
+    if !is_valid_folder_name(name) {
+        return Err(CommandError::new("invalidFolderName", name));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| CommandError::new("invalidPath", path.display().to_string()))?;
+    if !path.is_dir() {
+        return Err(CommandError::new("notFound", path.display().to_string()));
+    }
+    let target = parent.join(name);
+    if target.exists() && !is_same_file(path, &target) {
+        return Err(CommandError::new("folderExists", name));
+    }
+    fs::rename(path, &target).map_err(|e| io_message(&target, &e))?;
     Ok(target.to_string_lossy().to_string())
 }
 
@@ -323,13 +356,56 @@ mod tests {
             code_of(create_folder(&root, "读书").unwrap_err()),
             "folderExists"
         );
-        for bad in ["", "a/b", "..", ".hidden", "../out"] {
+        for bad in [
+            "", "a/b", "..", ".hidden", "../out", "a/", "a//", "a/.", "a\\b", "a\0b",
+        ] {
             assert_eq!(
                 code_of(create_folder(&root, bad).unwrap_err()),
                 "invalidFolderName",
                 "{bad}"
             );
         }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn renames_folder_in_place_and_rejects_bad_names() {
+        let root = temp_dir("rename");
+        fs::create_dir_all(root.join("Work/Drafts")).unwrap();
+        fs::write(root.join("Work/Drafts/a.md"), "a").unwrap();
+        fs::create_dir_all(root.join("Work/Taken")).unwrap();
+
+        let made = rename_folder(&root.join("Work/Drafts"), " 旧稿 ").unwrap();
+        assert!(Path::new(&made).is_dir());
+        assert!(root.join("Work/旧稿/a.md").is_file());
+        assert!(!root.join("Work/Drafts").exists());
+
+        assert_eq!(
+            code_of(rename_folder(&root.join("Work/旧稿"), "Taken").unwrap_err()),
+            "folderExists"
+        );
+        for bad in [
+            "", "a/b", "..", ".hidden", "../out", "a/", "a//", "a/.", "a\\b", "a\0b",
+        ] {
+            assert_eq!(
+                code_of(rename_folder(&root.join("Work/旧稿"), bad).unwrap_err()),
+                "invalidFolderName",
+                "{bad}"
+            );
+        }
+        // 只改大小写：大小写不敏感的卷上 target.exists() 为真，也得能改
+        let made = rename_folder(&root.join("Work/Taken"), "taken").unwrap();
+        assert_eq!(made, root.join("Work/taken").to_string_lossy());
+        let names: Vec<_> = fs::read_dir(root.join("Work"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(names.iter().any(|name| name == "taken"));
+        assert!(!names.iter().any(|name| name == "Taken"));
+        assert_eq!(
+            code_of(rename_folder(&root.join("Work/missing"), "x").unwrap_err()),
+            "notFound"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

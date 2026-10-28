@@ -50,6 +50,30 @@ pub fn record_self_write(path: &Path) {
     });
 }
 
+/// 记录整棵目录（文件夹改名后，里面的每个文件也会收到 watch 事件）：
+/// 不记录下来，正在编辑的文档会因为新路径的「外部修改」提示冲突。
+pub fn record_self_write_tree(root: &Path) {
+    record_self_write(root);
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        // 不跟着符号链接走到库外
+        if file_type.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        if file_type.is_dir() {
+            record_self_write_tree(&path);
+        } else {
+            record_self_write(&path);
+        }
+    }
+}
+
 /// 是否为应用自身产生的写入：不只看路径，还要求文件现在的 mtime / 大小和写完时一致。
 /// 否则 Ink 保存后 3 秒内别的程序（同步盘、git、其他编辑器）改了同一个文件，会被当成自写吞掉，
 /// 下一次保存就把外部修改覆盖了
@@ -181,6 +205,19 @@ mod tests {
         record_self_write(&path.with_file_name("gone.md"));
         assert!(is_self_write(&path.with_file_name("gone.md")));
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn renamed_folder_contents_count_as_self_writes() {
+        let path = temp_file("rename-tree");
+        let root = path.parent().unwrap();
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("sub/a.md"), "a").unwrap();
+        record_self_write_tree(root);
+        assert!(is_self_write(root));
+        assert!(is_self_write(&root.join("sub")));
+        assert!(is_self_write(&root.join("sub/a.md")));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
