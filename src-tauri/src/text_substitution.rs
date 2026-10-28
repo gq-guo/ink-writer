@@ -18,7 +18,11 @@ mod mac {
     extern "C" {
         static kCFBooleanFalse: CFTypeRef;
         static kCFPreferencesCurrentApplication: CFTypeRef;
-        fn CFStringCreateWithCString(alloc: CFTypeRef, c_str: *const c_char, encoding: u32) -> CFTypeRef;
+        fn CFStringCreateWithCString(
+            alloc: CFTypeRef,
+            c_str: *const c_char,
+            encoding: u32,
+        ) -> CFTypeRef;
         fn CFPreferencesSetAppValue(key: CFTypeRef, value: CFTypeRef, application: CFTypeRef);
         fn CFRelease(cf: CFTypeRef);
     }
@@ -41,5 +45,8 @@ mod mac {
 /// 在创建任何 WebView 之前调用（WebKit 只在第一次用到时读一次）
 pub fn disable_smart_substitutions() {
     #[cfg(target_os = "macos")]
-    mac::disable(&[c"WebAutomaticDashSubstitutionEnabled", c"WebAutomaticQuoteSubstitutionEnabled"]);
+    mac::disable(&[
+        c"WebAutomaticDashSubstitutionEnabled",
+        c"WebAutomaticQuoteSubstitutionEnabled",
+    ]);
 }
