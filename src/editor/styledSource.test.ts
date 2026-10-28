@@ -2,7 +2,7 @@ import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { describe, expect, it } from 'vitest'
 
-import { buildDecorations, concealMarkupFacet, cursorEngagedField } from '@/editor/styledSource'
+import { buildDecorations, concealMarkupFacet, cursorEngagedField, mergeRanges } from '@/editor/styledSource'
 import { computeFocusDecorations, focusModeField, setFocusModeEffect } from '@/editor/focusMode'
 
 function stateWith(doc: string, focus = false) {
@@ -215,6 +215,22 @@ describe('Focus Mode（spec §9）', () => {
     const decorations = computeFocusDecorations(withSelection, [rangeOf(withSelection)])
     // 被弱化的块不应覆盖光标所在的第一段
     expect(dimRanges(decorations).every((range) => range.from > 0)).toBe(true)
+  })
+})
+
+describe('mergeRanges', () => {
+  it('合并重叠与相接的区间（块级替换把可见区间切开、外扩后会重叠）', () => {
+    expect(mergeRanges([{ from: 30, to: 40 }, { from: 0, to: 10 }, { from: 5, to: 20 }, { from: 21, to: 25 }])).toEqual([
+      { from: 0, to: 25 },
+      { from: 30, to: 40 },
+    ])
+  })
+
+  it('合并后同一段只出一层行内代码标记', () => {
+    const doc = '段落 `code`\n\n后面'
+    const state = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })
+    const ranges = mergeRanges([{ from: 0, to: doc.length }, { from: 0, to: 12 }])
+    expect(classesOf(buildDecorations(state, ranges)).filter((c) => c === 'cm-md-code')).toHaveLength(1)
   })
 })
 

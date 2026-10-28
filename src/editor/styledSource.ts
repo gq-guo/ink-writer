@@ -245,9 +245,13 @@ export function buildDecorations(
     if (!concealedLine(line) || state.doc.lineAt(to).number !== line) return
     builder.marks.push(Decoration.replace({}).range(from, to))
   }
-  /** 整块隐藏标记（代码块等）：光标 / 选区不在 [fromLine, toLine] 任何一行 */
+  /** 整块隐藏标记（代码块等）：光标 / 选区不在 [fromLine, toLine] 任何一行（按选区首末行比，不展开整片选区） */
   const concealedBlock = (fromLine: number, toLine: number) =>
-    activeLines !== null && ![...activeLines].some((line) => line >= fromLine && line <= toLine)
+    activeLines !== null &&
+    (activeLines.size === 0 ||
+      !state.selection.ranges.some(
+        (range) => state.doc.lineAt(range.from).number <= toLine && state.doc.lineAt(range.to).number >= fromLine,
+      ))
   /** 引用的层数（每个 Blockquote 只算一次：多个可见区间可能各进一次） */
   const quoteDepth = new Map<number, number>()
   const seenQuotes = new Set<string>()
@@ -682,17 +686,34 @@ function ancestorCount(node: SyntaxNode, name: string): number {
   return count
 }
 
-/** 可见区间 ± pad 行 */
+/**
+ * 有序区间里重叠或相接的合并成一段。
+ * 渲染好的表格这类块级替换会把 visibleRanges 切成两段，各自外扩后彼此重叠：
+ * 不合并的话同一段语法树走两遍，行内代码、kbd 等标记叠成两层（字号 0.8em × 0.8em）
+ */
+export function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+  const merged: { from: number; to: number }[] = []
+  for (const range of [...ranges].sort((a, b) => a.from - b.from)) {
+    const last = merged[merged.length - 1]
+    if (last && range.from <= last.to + 1) last.to = Math.max(last.to, range.to)
+    else merged.push({ ...range })
+  }
+  return merged
+}
+
+/** 可见区间 ± pad 行（重叠的合并） */
 export function paddedVisibleRanges(
   view: EditorView,
   pad: number,
 ): { from: number; to: number }[] {
   const { doc } = view.state
-  return view.visibleRanges.map((range) => {
-    const startLine = Math.max(1, doc.lineAt(range.from).number - pad)
-    const endLine = Math.min(doc.lines, doc.lineAt(range.to).number + pad)
-    return { from: doc.line(startLine).from, to: doc.line(endLine).to }
-  })
+  return mergeRanges(
+    view.visibleRanges.map((range) => {
+      const startLine = Math.max(1, doc.lineAt(range.from).number - pad)
+      const endLine = Math.min(doc.lines, doc.lineAt(range.to).number + pad)
+      return { from: doc.line(startLine).from, to: doc.line(endLine).to }
+    }),
+  )
 }
 
 /** 光标是否跨行移动（跨行才需要重算样式） */

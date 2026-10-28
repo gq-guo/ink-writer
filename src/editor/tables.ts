@@ -10,10 +10,11 @@
  * - 单元格里的粗体、斜体、删除线、行内代码、链接文字照样式显示，其余语法原样显示；
  * - 内容一律用 textContent 写进 DOM，不拼 HTML；
  * - 点单元格：光标落到那一格源码的末尾，表格随即变回源码；
- * - ↑↓ 不会跨过渲染好的表格，而是走进它的首行 / 末行（否则键盘进不去表格）。
+ * - ↑↓ 不会跨过渲染好的表格，而是走进它的首行 / 末行（否则键盘进不去表格）；
+ * - 每次击键只重建改动碰到的表格，其余沿用上一次的结果；超过 MAX_RENDERED_ROWS 行的表格保持源码。
  */
 import { syntaxTree } from '@codemirror/language'
-import { EditorSelection, Prec, StateField, type EditorState, type Range } from '@codemirror/state'
+import { EditorSelection, Prec, StateField, type ChangeDesc, type EditorState, type Range } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 
@@ -107,7 +108,8 @@ function inlinePieces(state: EditorState, parent: SyntaxNode, from: number, to: 
         pieces.push({ kind: 'code', text: state.doc.sliceString(open.to, close.from).trim() })
         continue
       }
-    } else if (child.name === 'Link') {
+    } else if (child.name === 'Link' && marks.some((mark) => mark.name === 'URL' || mark.name === 'LinkLabel')) {
+      // 只认带地址或 [label] 的链接：单独的 [x]（勾选列）语法树也算 Link，要原样显示
       const linkMarks = marks.filter((mark) => mark.name === 'LinkMark')
       const open = linkMarks[0]
       const close = linkMarks.find((mark) => state.doc.sliceString(mark.from, mark.to) === ']')
@@ -160,11 +162,15 @@ function rowCells(state: EditorState, row: SyntaxNode, tableFrom: number, column
   return cells
 }
 
+/** 再长的表格不渲染：整张表是一个不虚拟化的 DOM，光标每次离开都要重画 */
+export const MAX_RENDERED_ROWS = 1000
+
 export function tableModel(state: EditorState, table: SyntaxNode, tableFrom: number): TableModel | null {
   const children = childrenOf(table)
   const header = children.find((child) => child.name === 'TableHeader')
   const delimiter = children.find((child) => child.name === 'TableDelimiter')
   if (!header || !delimiter) return null
+  if (children.filter((child) => child.name === 'TableRow').length > MAX_RENDERED_ROWS) return null
   const align = parseAlignments(state.doc.sliceString(delimiter.from, delimiter.to))
   if (align.length === 0) return null
   return {
@@ -176,14 +182,30 @@ export function tableModel(state: EditorState, table: SyntaxNode, tableFrom: num
   }
 }
 
-/** 文档顶层的表格（语法树已解析到的部分） */
-export function findTables(state: EditorState): TableBlock[] {
+/**
+ * 文档顶层的表格（语法树已解析到的部分）。
+ * 给了上一次的结果和这次的改动时：改动没碰到的表格（映射后首尾位置不变）直接沿用 model，
+ * 只重建被改的那张 —— 长文里每次击键不必把所有表格重新拆一遍
+ */
+export function findTables(
+  state: EditorState,
+  previous?: { tables: TableBlock[]; changes: ChangeDesc },
+): TableBlock[] {
+  const reusable = new Map<string, TableModel>()
+  if (previous) {
+    for (const table of previous.tables) {
+      if (previous.changes.touchesRange(table.from, table.to)) continue
+      const from = previous.changes.mapPos(table.from)
+      const to = previous.changes.mapPos(table.to)
+      reusable.set(`${from}:${to}`, table.model)
+    }
+  }
   const tables: TableBlock[] = []
   for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) {
     if (node.name !== 'Table') continue
     const from = state.doc.lineAt(node.from).from
     const to = state.doc.lineAt(node.to).to
-    const model = tableModel(state, node, from)
+    const model = reusable.get(`${from}:${to}`) ?? tableModel(state, node, from)
     if (model) tables.push({ from, to, model })
   }
   return tables
@@ -213,16 +235,14 @@ function renderPieces(pieces: InlinePiece[], parent: HTMLElement): void {
 }
 
 class TableWidget extends WidgetType {
-  constructor(
-    /** 表格源码：渲染结果只取决于它（单元格位置也相对表格首行，跟着它走） */
-    readonly source: string,
-    readonly model: TableModel,
-  ) {
+  /** 单元格位置相对表格首行，表格整体挪动时 model 照样可用 */
+  constructor(readonly model: TableModel) {
     super()
   }
 
+  /** 表格没被改过时 model 是同一个对象（findTables 沿用），DOM 不必重画 */
   eq(other: TableWidget): boolean {
-    return other.source === this.source
+    return other.model === this.model
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -256,9 +276,11 @@ class TableWidget extends WidgetType {
     // 点哪一格，光标就落到那一格源码的末尾（表格随之变回源码）
     wrap.addEventListener('mousedown', (event) => {
       if (event.button !== 0) return
-      event.preventDefault()
+      // 点在单元格外（表格太宽时的横向滚动条、表格下方的留白）：交给浏览器，滚动条照常能拖
       const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-offset]')
-      const offset = Number(cell?.dataset.offset ?? 0)
+      if (!cell) return
+      event.preventDefault()
+      const offset = Number(cell.dataset.offset)
       const pos = Math.min(view.posAtDOM(wrap) + offset, view.state.doc.length)
       view.dispatch({ selection: { anchor: pos }, userEvent: 'select.pointer' })
       view.focus()
@@ -292,7 +314,7 @@ function tableDecorations(state: EditorState, tables: TableBlock[]): DecorationS
     if (touched) continue
     ranges.push(
       Decoration.replace({
-        widget: new TableWidget(state.doc.sliceString(table.from, table.to), table.model),
+        widget: new TableWidget(table.model),
         block: true,
       }).range(table.from, table.to),
     )
@@ -300,16 +322,18 @@ function tableDecorations(state: EditorState, tables: TableBlock[]): DecorationS
   return Decoration.set(ranges)
 }
 
-function build(state: EditorState): TableState {
-  const tables = isPerformanceMode(state.doc.length) ? [] : findTables(state)
+function build(state: EditorState, previous?: { tables: TableBlock[]; changes: ChangeDesc }): TableState {
+  const tables = isPerformanceMode(state.doc.length) ? [] : findTables(state, previous)
   return { tables, decorations: tableDecorations(state, tables) }
 }
 
 export const tablesField = StateField.define<TableState>({
-  create: build,
+  create: (state) => build(state),
   update(value, tr) {
-    // 文本变了，或后台解析推进了（长文的表格可能刚解析到）：重新找表格
-    if (tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState)) return build(tr.state)
+    // 文本变了，或后台解析推进了（长文的表格可能刚解析到）：重新找表格，没被改的沿用
+    if (tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
+      return build(tr.state, { tables: value.tables, changes: tr.changes })
+    }
     const engagedChanged =
       tr.state.field(cursorEngagedField, false) !== tr.startState.field(cursorEngagedField, false)
     if (tr.selection || tr.reconfigured || engagedChanged) {

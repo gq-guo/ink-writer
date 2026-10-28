@@ -3,7 +3,7 @@ import { EditorSelection, EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 
 import { concealMarkupFacet, cursorEngagedField } from './styledSource'
-import { findTables, moveIntoTable, parseAlignments, tablesField, type InlinePiece } from './tables'
+import { MAX_RENDERED_ROWS, findTables, moveIntoTable, parseAlignments, tablesField, type InlinePiece } from './tables'
 
 function create(doc: string, options: { conceal?: boolean; cursor?: number } = {}) {
   return EditorState.create({
@@ -68,6 +68,16 @@ describe('findTables', () => {
     expect(state.doc.sliceString(0, table!.from + valueCell.offset).endsWith('| Project | RTC')).toBe(true)
   })
 
+  it('keeps brackets of [x] check marks that are not links', () => {
+    const [table] = findTables(create('| 完成 | 项 |\n|---|---|\n| [x] | [链接](u) |'))
+    expect(table!.model.rows[0]!.map((cell) => flat(cell.content))).toEqual(['[x]', '<link>链接</link>'])
+  })
+
+  it('leaves very long tables as source', () => {
+    const rows = Array.from({ length: MAX_RENDERED_ROWS + 1 }, (_, i) => `| ${i} | x |`).join('\n')
+    expect(findTables(create(`| a | b |\n|---|---|\n${rows}`))).toEqual([])
+  })
+
   it('ignores tables nested in block quotes', () => {
     expect(findTables(create('> | a | b |\n> |---|---|\n> | 1 | 2 |'))).toEqual([])
   })
@@ -99,6 +109,29 @@ describe('tablesField', () => {
     let state = create('text\n\n')
     state = state.update({ changes: { from: state.doc.length, insert: TABLE }, selection: { anchor: 0 } }).state
     expect(rendered(state)).toEqual([[6, state.doc.length]])
+  })
+})
+
+describe('table model reuse', () => {
+  const doc = `段落\n\n${TABLE}\n\n结尾`
+
+  it('keeps the model of a table the edit did not touch', () => {
+    const state = create(doc)
+    const before = state.field(tablesField).tables[0]!.model
+    const typed = state.update({ changes: { from: 1, insert: '加字' } }).state
+    const after = typed.field(tablesField).tables[0]!
+    expect(after.model).toBe(before)
+    expect(after.from).toBe(doc.indexOf('|') + 2)
+  })
+
+  it('rebuilds the table that was edited', () => {
+    const state = create(doc)
+    const before = state.field(tablesField).tables[0]!.model
+    const pos = doc.indexOf('RTC') + 3
+    const typed = state.update({ changes: { from: pos, insert: '-1' } }).state
+    const after = typed.field(tablesField).tables[0]!.model
+    expect(after).not.toBe(before)
+    expect(flat(after.rows[0]![1]!.content)).toBe('RTC-1')
   })
 })
 
