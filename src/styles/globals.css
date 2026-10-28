@@ -738,6 +738,14 @@ html .cm-editor .cm-searchMatch.cm-searchMatch-selected {
   opacity: 0.35;
 }
 
+/* 渲染好的表格（块级 widget）：出现即说明光标不在表格里，Focus Mode 下总是变淡 */
+.cm-content .cm-ink-table {
+  transition: opacity 220ms ease;
+}
+.ink-focus-on .cm-content .cm-ink-table {
+  opacity: 0.35;
+}
+
 /* ==========================================================================
    窗口拖拽区
    macOS 红绿灯内嵌（titleBarStyle: Overlay）时 webview 会盖住原生标题栏，

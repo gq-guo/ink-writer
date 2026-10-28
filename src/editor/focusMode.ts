@@ -33,6 +33,10 @@ export const focusModeField = StateField.define<boolean>({
     }
     return value
   },
+  // 编辑器上挂 ink-focus-on：渲染好的表格是块级 widget，行装饰的 ink-focus-dim 落不到它身上，
+  // 由 CSS 按这个 class 让它变淡（光标在表格里时表格是源码，走行装饰）
+  provide: (field) =>
+    EditorView.editorAttributes.from(field, (on): Record<string, string> => (on ? { class: 'ink-focus-on' } : {})),
 })
 
 /** 重算防抖（spec §9.3） */
