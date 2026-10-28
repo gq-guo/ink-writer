@@ -61,10 +61,19 @@ fn visit(root: &Path, dir: &Path, out: &mut Vec<String>) -> std::io::Result<bool
     Ok(has_document)
 }
 
-/// 在 parent 下新建文件夹；name 只能是单个名字（不含 `/`、`..`，不以 `.` 开头）
+/// 文件夹名只能是单个名字：不含 `/`、`\`、`\0`、`..`，不以 `.` 开头。
+///
+/// 光靠 is_single_file_name 不够：Path::components 会吞掉结尾的 `/`，
+/// `Archive/`、`Archive/.` 也算单个分量，rename 能成功，返回的路径却带着 `/`，
+/// 前端拼出 `Archive//Note.md` 这样的路径，和 watcher 事件对不上
+fn is_valid_folder_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains(['/', '\\', '\0']) && is_single_file_name(name)
+}
+
+/// 在 parent 下新建文件夹；name 的规则见 is_valid_folder_name
 pub fn create_folder(parent: &Path, name: &str) -> Result<String, CommandError> {
     let name = name.trim();
-    if name.is_empty() || !is_single_file_name(name) {
+    if !is_valid_folder_name(name) {
         return Err(CommandError::new("invalidFolderName", name));
     }
     let target = parent.join(name);
@@ -82,7 +91,7 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<String, CommandError> 
 /// 但那是同一个目录，照常 rename —— 否则永远改不了大小写。
 pub fn rename_folder(path: &Path, new_name: &str) -> Result<String, CommandError> {
     let name = new_name.trim();
-    if name.is_empty() || !is_single_file_name(name) {
+    if !is_valid_folder_name(name) {
         return Err(CommandError::new("invalidFolderName", name));
     }
     let parent = path
@@ -347,7 +356,9 @@ mod tests {
             code_of(create_folder(&root, "读书").unwrap_err()),
             "folderExists"
         );
-        for bad in ["", "a/b", "..", ".hidden", "../out"] {
+        for bad in [
+            "", "a/b", "..", ".hidden", "../out", "a/", "a//", "a/.", "a\\b", "a\0b",
+        ] {
             assert_eq!(
                 code_of(create_folder(&root, bad).unwrap_err()),
                 "invalidFolderName",
@@ -373,13 +384,24 @@ mod tests {
             code_of(rename_folder(&root.join("Work/旧稿"), "Taken").unwrap_err()),
             "folderExists"
         );
-        for bad in ["", "a/b", "..", ".hidden", "../out"] {
+        for bad in [
+            "", "a/b", "..", ".hidden", "../out", "a/", "a//", "a/.", "a\\b", "a\0b",
+        ] {
             assert_eq!(
                 code_of(rename_folder(&root.join("Work/旧稿"), bad).unwrap_err()),
                 "invalidFolderName",
                 "{bad}"
             );
         }
+        // 只改大小写：大小写不敏感的卷上 target.exists() 为真，也得能改
+        let made = rename_folder(&root.join("Work/Taken"), "taken").unwrap();
+        assert_eq!(made, root.join("Work/taken").to_string_lossy());
+        let names: Vec<_> = fs::read_dir(root.join("Work"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(names.iter().any(|name| name == "taken"));
+        assert!(!names.iter().any(|name| name == "Taken"));
         assert_eq!(
             code_of(rename_folder(&root.join("Work/missing"), "x").unwrap_err()),
             "notFound"

@@ -453,7 +453,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       // 和文档改名 / 移动一样排进写入队列：改名途中到期的自动保存排在后面，
       // 等 activeDocument.path 换到新目录之后再写
       const step = writeChain.then(async () => {
-        const renamed = await invoke<string>('rename_folder', { path: oldDir, newName: name })
+        // Rust 只接受单个名字，返回的路径不会带结尾的 /；这里再去一次，
+        // 否则 remap 出来的是 Archive//Note.md，和 watcher 事件、收藏都对不上
+        const renamed = (await invoke<string>('rename_folder', { path: oldDir, newName: name })).replace(/\/+$/, '')
         const newFolder = renamed.startsWith(`${base}/`) ? renamed.slice(base.length + 1) : folder
         const newPrefix = `${newFolder}/`
         const remap = (path: string) =>
