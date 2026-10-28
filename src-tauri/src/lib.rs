@@ -11,6 +11,7 @@ mod fs_ops;
 mod open_requests;
 mod search;
 mod tags;
+mod text_substitution;
 mod watcher;
 mod window_theme;
 
@@ -643,6 +644,9 @@ pub mod testing {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 输入 -- 不被换成 —（Markdown 源码一字不差）；必须早于主窗口的 WebView
+    text_substitution::disable_smart_substitutions();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())

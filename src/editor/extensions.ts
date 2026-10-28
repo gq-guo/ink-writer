@@ -41,6 +41,7 @@ import { useLocaleStore } from '@/lib/i18n'
 import { inkSearchPanelPlugin } from './searchPanel'
 import { inkImageHandler } from './imageHandler'
 import { inlineImages } from './inlineImages'
+import { inkTableKeymap, tablesField } from './tables'
 import { loadInlineImage } from '@/lib/imageLoader'
 import { inkLinkHandler } from './links'
 import { inkDocHeader } from './docHeader'
@@ -121,6 +122,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
       onError: options.onError,
     }),
     inlineImages({ getDocDir: options.getDocDir, load: loadInlineImage }),
+    tablesField,
     inkLinkHandler({
       getDocDir: options.getDocDir,
       onOpenUrl: options.onOpenUrl,
@@ -134,6 +136,7 @@ export function createInkExtensions(options: InkExtensionOptions): Extension[] {
 
     // ── 键位 ──
     inkListKeymap,
+    inkTableKeymap,
     keymap.of([...inkEditorKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
 
     // ── 主题与外观 ──

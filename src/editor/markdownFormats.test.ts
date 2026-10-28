@@ -160,14 +160,16 @@ describe('Markdown 全格式：链接与图片', () => {
     expect(marksOf(text, 'link-text')).toEqual(['Ink 官网', '链接'])
   })
 
-  it('自动链接、引用式链接保持原样，只是弱化标记；图片在光标外只显示文件名', () => {
+  it('自动链接隐藏尖括号、引用式链接只留文字（定义行不动）；图片在光标外只显示文件名', () => {
     const autolink = '自动链接 <https://example.com> 与裸链接 https://example.com/plain 。'
-    expect(line(autolink).shown).toBe(autolink)
-    expect(marksOf(autolink, 'url')).toContain('https://example.com')
+    expect(line(autolink).shown).toBe('自动链接 https://example.com 与裸链接 https://example.com/plain 。')
+    expect(marksOf(autolink, 'link-text')).toEqual(['https://example.com', 'https://example.com/plain'])
 
     const reference = '引用式链接 [参考链接][ref] 。'
-    expect(line(reference).shown).toBe(reference)
+    expect(line(reference).shown).toBe('引用式链接 参考链接 。')
     expect(marksOf(reference, 'link-text')).toEqual(['参考链接'])
+    expect(line('[ref]: https://example.com/ref').shown).toBe('[ref]: https://example.com/ref')
+    expect(marksOf('[ref]: https://example.com/ref', 'url')).toEqual(['https://example.com/ref'])
 
     const image = '图片 ![替代文字](assets/photo.png)'
     expect(line(image).shown).toBe('图片 photo.png')
@@ -176,8 +178,11 @@ describe('Markdown 全格式：链接与图片', () => {
 })
 
 describe('Markdown 全格式：列表与任务', () => {
-  it('列表标记始终可见、弱化', () => {
-    for (const text of ['- 无序列表一', '* 星号列表', '+ 加号列表', '1. 有序列表一', '1) 括号序号', '    - 嵌套三级']) {
+  it('光标外无序列表的 - * + 换成圆点，有序列表的序号保留', () => {
+    for (const text of ['- 无序列表一', '* 星号列表', '+ 加号列表', '    - 嵌套三级']) {
+      expect(line(text).shown).toBe(text.replace(/[-*+]/, ''))
+    }
+    for (const text of ['1. 有序列表一', '1) 括号序号']) {
       expect(line(text).shown).toBe(text)
       expect(line(text).marks.some(([cls]) => cls === 'mark')).toBe(true)
     }
@@ -203,14 +208,19 @@ describe('Markdown 全格式：列表与任务', () => {
 })
 
 describe('Markdown 全格式：块级', () => {
-  it('引用：整块加引用样式，> 保持可见', () => {
-    expect(line('> 一层引用，里面有 **粗体**。').lineClasses).toContain('quote')
-    expect(line('> 一层引用，里面有 **粗体**。').shown).toBe('> 一层引用，里面有 粗体。')
-    expect(line('> > 二层引用').lineClasses).toContain('quote')
+  it('引用：光标外隐藏 > ，每层一条竖线', () => {
+    expect(line('> 一层引用，里面有 **粗体**。').lineClasses).toEqual(expect.arrayContaining(['quote', 'quote-1']))
+    expect(line('> 一层引用，里面有 **粗体**。').shown).toBe('一层引用，里面有 粗体。')
+    expect(line('> > 二层引用').lineClasses).toEqual(expect.arrayContaining(['quote', 'quote-2']))
+    expect(line('> > 二层引用').shown).toBe('二层引用')
+    expect(line('> - 引用里的列表').shown).toBe(' 引用里的列表')
   })
 
-  it('围栏代码块：有底色，里面的 Markdown 不渲染、不隐藏', () => {
-    expect(line('```ts').lineClasses).toEqual(expect.arrayContaining(['codeblock', 'codeblock-start']))
+  it('围栏代码块：光标外围栏行只留语言名，其余有底色、不渲染', () => {
+    expect(line('```ts').lineClasses).toEqual(expect.arrayContaining(['codeblock', 'codeblock-start', 'fence']))
+    expect(line('```ts').shown).toBe('')
+    expect(line('```').lineClasses).toEqual(expect.arrayContaining(['codeblock-end', 'fence']))
+    expect(line('~~~').shown).toBe('')
     const inner = '波浪线围栏，里面的 **粗体** 和 # 标题 都不应被渲染'
     expect(line(inner).shown).toBe(inner)
     expect(line(inner).marks.map(([cls]) => cls)).toEqual(['codeblock-text'])
@@ -236,14 +246,12 @@ describe('Markdown 全格式：块级', () => {
     }
   })
 
-  it('HTML 标签弱化、原样显示', () => {
+  it('HTML 标签弱化、原样显示；只有 <kbd> 画成按键并在光标外隐藏标签', () => {
     expect(line('<details>').marks.map(([cls]) => cls)).toEqual(['mark'])
-    expect(marksOf('行内 HTML：<kbd>⌘</kbd> + <kbd>K</kbd>', 'mark')).toEqual([
-      '<kbd>',
-      '</kbd>',
-      '<kbd>',
-      '</kbd>',
-    ])
+    expect(line('<details>').shown).toBe('<details>')
+    const kbd = '行内 HTML：<kbd>⌘</kbd> + <kbd>K</kbd>'
+    expect(line(kbd).shown).toBe('行内 HTML：⌘ + K')
+    expect(marksOf(kbd, 'kbd')).toEqual(['⌘', 'K'])
   })
 })
 
